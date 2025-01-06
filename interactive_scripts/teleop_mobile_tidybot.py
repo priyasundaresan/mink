@@ -1,138 +1,130 @@
 import mujoco
 import mujoco.viewer
 import numpy as np
-from dataclasses import dataclass
 from pathlib import Path
-from dm_control.viewer import user_input
-from loop_rate_limiters import RateLimiter
+from dataclasses import dataclass
 from scipy.spatial.transform import Rotation as R
-
+from loop_rate_limiters import RateLimiter
 import mink
 from teleop.policies import TeleopPolicy
+from dm_control.viewer import user_input
 
-_HERE = Path(__file__).parent
-_XML = _HERE / "stanford_tidybot" / "scene.xml"
+class MujocoEnv:
+    def __init__(self, xml_file, frame_name="pinch_site", rgb_size=(640, 480)):
+        self.model = mujoco.MjModel.from_xml_path(xml_file)
+        self.data = mujoco.MjData(self.model)
+
+        # Tasks and solver setup
+        self.configuration = mink.Configuration(self.model)
+
+        self.end_effector_task = mink.FrameTask(
+            frame_name=frame_name,
+            frame_type="site",
+            position_cost=1.0,
+            orientation_cost=1.0,
+            lm_damping=1.0,
+        )
+        self.posture_cost = np.zeros((self.model.nv,))
+        self.posture_cost[3:] = 1e-3
+        self.posture_task = mink.PostureTask(self.model, cost=self.posture_cost)
+
+        self.tasks = [self.end_effector_task, self.posture_task]
+        self.solver = "quadprog"
+        self.pos_threshold = 1e-4
+        self.ori_threshold = 1e-4
+        self.max_iters = 20
+
+        # Actuator IDs
+        self.joint_names = [
+            "joint_x", "joint_y", "joint_th",
+            "joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6", "joint_7"
+        ]
+        self.dof_ids = np.array([self.model.joint(name).id for name in self.joint_names])
+        self.actuator_ids = np.array([self.model.actuator(name).id for name in self.joint_names])
+        self.fingers_actuator_id = self.model.actuator("fingers_actuator").id
+
+    def reset(self):
+        mujoco.mj_resetDataKeyframe(self.model, self.data, self.model.key("home").id)
+        self.configuration.update(self.data.qpos)
+        self.posture_task.set_target_from_configuration(self.configuration)
+        mujoco.mj_forward(self.model, self.data)
+
+        # Initialize the mocap target at the end-effector site
+        mink.move_mocap_to_frame(
+            self.model, self.data, "pinch_site_target", "pinch_site", "site"
+        )
+
+    def step(self, action, gripper_closed):
+        # Update mocap target from action
+        if isinstance(action, dict):
+            self.data.mocap_pos[0] = action['arm_pos'][[1, 0, 2]] * [-1, 1, 1]
+            self.data.mocap_quat[0] = action['arm_quat'][[3, 1, 0, 2]] * [1, -1, 1, 1]
+
+        # Update target from mocap
+        T_wt = mink.SE3.from_mocap_name(self.model, self.data, "pinch_site_target")
+        self.end_effector_task.set_target(T_wt)
+
+        # IK solving
+        for _ in range(self.max_iters):
+            vel = mink.solve_ik(self.configuration, self.tasks, 1 / 200.0, self.solver, 1e-3)
+            self.configuration.integrate_inplace(vel, 1 / 200.0)
+            err = self.end_effector_task.compute_error(self.configuration)
+            if (
+                np.linalg.norm(err[:3]) <= self.pos_threshold
+                and np.linalg.norm(err[3:]) <= self.ori_threshold
+            ):
+                break
+
+        # Apply controls
+        self.data.ctrl[self.actuator_ids] = self.configuration.q[self.dof_ids]
+        self.data.ctrl[self.fingers_actuator_id] = gripper_closed * 255
+        mujoco.mj_step(self.model, self.data)
+
 
 @dataclass
 class KeyCallback:
     gripper_closed: bool = False
-    fix_base: bool = False
     pause: bool = False
 
     def __call__(self, key: int) -> None:
-        if key == user_input.KEY_ENTER:
-            self.fix_base = not self.fix_base
-        elif key == user_input.KEY_SPACE:
+        if key == user_input.KEY_SPACE:
             self.pause = not self.pause
-        elif key == user_input.KEY_P:  # Toggle gripper state with "P" key
+        elif key == user_input.KEY_P:
             self.gripper_closed = not self.gripper_closed
 
-
 if __name__ == "__main__":
-    # Load the model and data
-    model = mujoco.MjModel.from_xml_path(_XML.as_posix())
-    data = mujoco.MjData(model)
+    _HERE = Path(__file__).parent
+    _XML = _HERE / "stanford_tidybot" / "scene.xml"
 
-    # Joints to control
-    joint_names = [
-        "joint_x", "joint_y", "joint_th",
-        "joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6", "joint_7"
-    ]
-    dof_ids = np.array([model.joint(name).id for name in joint_names])
-    actuator_ids = np.array([model.actuator(name).id for name in joint_names])
-    fingers_actuator_id = model.actuator("fingers_actuator").id
-
-    # Configuration and tasks
-    configuration = mink.Configuration(model)
-
-    end_effector_task = mink.FrameTask(
-        frame_name="pinch_site",
-        frame_type="site",
-        position_cost=1.0,
-        orientation_cost=1.0,
-        lm_damping=1.0,
-    )
-    posture_cost = np.zeros((model.nv,))
-    posture_cost[3:] = 1e-3
-    posture_task = mink.PostureTask(model, cost=posture_cost)
-
-    immobile_base_cost = np.zeros((model.nv,))
-    immobile_base_cost[:3] = 100
-    damping_task = mink.DampingTask(model, immobile_base_cost)
-
-    tasks = [end_effector_task, posture_task]
-    limits = [
-        mink.ConfigurationLimit(model),
-    ]
-
-    solver = "quadprog"
-    pos_threshold = 1e-4
-    ori_threshold = 1e-4
-    max_iters = 20
-
-    # Teleoperation setup
+    env = MujocoEnv(_XML.as_posix())
     policy = TeleopPolicy()
-    policy.reset()  # Wait for user to press "Start episode"
-
+    policy.reset()
     key_callback = KeyCallback()
 
+    env.reset()
+
     with mujoco.viewer.launch_passive(
-        model=model,
-        data=data,
+        model=env.model,
+        data=env.data,
         show_left_ui=False,
         show_right_ui=False,
         key_callback=key_callback,
     ) as viewer:
-        mujoco.mjv_defaultFreeCamera(model, viewer.cam)
-
-        mujoco.mj_resetDataKeyframe(model, data, model.key("home").id)
-        configuration.update(data.qpos)
-        posture_task.set_target_from_configuration(configuration)
-        mujoco.mj_forward(model, data)
-
-        # Initialize the mocap target at the end-effector site
-        mink.move_mocap_to_frame(model, data, "pinch_site_target", "pinch_site", "site")
 
         rate = RateLimiter(frequency=200.0, warn=False)
+        mujoco.mjv_defaultFreeCamera(model, viewer.cam)
 
         while viewer.is_running():
-            # Fetch iPhone teleop data
-            obs = {
-                'base_pose': np.zeros(3),
-                'arm_pos': data.mocap_pos[0],  # Initial position of mocap
-                'arm_quat': data.mocap_quat[0][[1, 2, 3, 0]],  # Reformat (w, x, y, z)
-                'gripper_pos': np.zeros(1),
-            }
-            action = policy.step(obs)
-
-            # Update mocap target from iPhone data
-            if isinstance(action, dict):
-                data.mocap_pos[0] = action['arm_pos'][[1, 0, 2]] * [-1, 1, 1]
-                data.mocap_quat[0] = action['arm_quat'][[3, 1, 0, 2]] * [1, -1, 1, 1]
-
-            # Update target from mocap
-            T_wt = mink.SE3.from_mocap_name(model, data, "pinch_site_target")
-            end_effector_task.set_target(T_wt)
-
-            # IK solving
-            for _ in range(max_iters):
-                vel = mink.solve_ik(configuration, tasks, rate.dt, solver, 1e-3)
-                configuration.integrate_inplace(vel, rate.dt)
-                err = end_effector_task.compute_error(configuration)
-                if (
-                    np.linalg.norm(err[:3]) <= pos_threshold
-                    and np.linalg.norm(err[3:]) <= ori_threshold
-                ):
-                    break
-
-            # Apply controls
             if not key_callback.pause:
-                data.ctrl[actuator_ids] = configuration.q[dof_ids]
-                data.ctrl[fingers_actuator_id] = key_callback.gripper_closed * 255
-                mujoco.mj_step(model, data)
-            else:
-                mujoco.mj_forward(model, data)
+                obs = {
+                    'base_pose': np.zeros(3),
+                    'arm_pos': env.data.mocap_pos[0],
+                    'arm_quat': env.data.mocap_quat[0][[1, 2, 3, 0]],
+                    'gripper_pos': np.zeros(1),
+                }
+                action = policy.step(obs)
+                env.step(action, key_callback.gripper_closed)
 
-            # Sync and maintain rate
             viewer.sync()
             rate.sleep()
+
