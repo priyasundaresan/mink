@@ -21,7 +21,7 @@
     <light pos="0 0 1.5" directional="true"/>
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
     <body name="pinch_site_target" pos="0.5 0 .5" quat="0 1 0 0" mocap="true">
-      <geom type="box" size=".05 .05 .05" contype="0" conaffinity="0" rgba=".6 .3 .3 .2"/>
+      <geom type="box" size=".008 .008 .008" contype="0" conaffinity="0" rgba=".6 .3 .3 0.7"/>
     </body>
     <body name="interactive_cube" pos="0 0 0.1">
       <geom name="cube_geom" type="box" size="0.02 0.02 0.02" rgba="0 1 0 1" density="5000"/>

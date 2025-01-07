@@ -57,7 +57,7 @@ class MujocoEnv:
     def step(self, action, gripper_closed):
         # Update mocap target from action
         if isinstance(action, dict):
-            self.data.mocap_pos[0] = action['arm_pos'][[1, 0, 2]] * [-1, 1, 1]
+            self.data.mocap_pos[0] = action['arm_pos'][[0, 1, 2]] * [1, -1, 1]
             self.data.mocap_quat[0] = action['arm_quat'][[3, 1, 0, 2]] * [1, -1, 1, 1]
 
         # Update target from mocap
@@ -102,6 +102,8 @@ if __name__ == "__main__":
     key_callback = KeyCallback()
 
     env.reset()
+    
+    gripper_state = 0
 
     with mujoco.viewer.launch_passive(
         model=env.model,
@@ -119,12 +121,13 @@ if __name__ == "__main__":
                 obs = {
                     'base_pose': np.zeros(3),
                     'arm_pos': env.data.mocap_pos[0],
-                    'arm_quat': env.data.mocap_quat[0][[1, 2, 3, 0]],
+                    'arm_quat': env.data.mocap_quat[0][[3, 1, 0, 2]] * [1, -1, 1, 1],
                     'gripper_pos': np.zeros(1),
                 }
                 action = policy.step(obs)
-                env.step(action, key_callback.gripper_closed)
+                gripper_state = gripper_state if (not action or type(action) == str) else action['gripper_pos'] 
+                #env.step(action, key_callback.gripper_closed)
+                env.step(action, gripper_state)
 
             viewer.sync()
             rate.sleep()
-

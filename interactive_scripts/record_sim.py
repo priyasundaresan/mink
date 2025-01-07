@@ -10,11 +10,15 @@ import mink
 from teleop.policies import TeleopPolicy
 from dm_control.viewer import user_input
 from mj_utils.camera import Camera
+from interactive_scripts.dataset_recorder import DatasetRecorder, ActMode
 
 class MujocoEnv:
-    def __init__(self, xml_file, camera_names=["base", "wrist"]):
+    def __init__(self, xml_file, camera_names=["base1", "base2", "wrist"], data_folder="dev1"):
         self.model = mj.MjModel.from_xml_path(xml_file)
         self.data = mj.MjData(self.model)
+        self.data_folder = data_folder
+
+        self.recorder = DatasetRecorder(self.data_folder)
 
         self.gripper_closed = False
  
@@ -55,6 +59,7 @@ class MujocoEnv:
         self.teleop_policy = TeleopPolicy()
 
     def reset(self):
+        next_idx = self.recorder.get_next_idx()
         mj.mj_resetDataKeyframe(self.model, self.data, self.model.key("home").id)
         self.configuration.update(self.data.qpos)
         self.posture_task.set_target_from_configuration(self.configuration)
@@ -69,11 +74,12 @@ class MujocoEnv:
     def step(self, action, gripper_closed):
         # Update mocap target from action
         if isinstance(action, dict):
-            self.data.mocap_pos[0] = action['arm_pos'][[1, 0, 2]] * [-1, 1, 1]
+            self.data.mocap_pos[0] = action['arm_pos'][[0, 1, 2]] * [1, -1, 1]
             self.data.mocap_quat[0] = action['arm_quat'][[3, 1, 0, 2]] * [1, -1, 1, 1]
 
         # Update target from mocap
         T_wt = mink.SE3.from_mocap_name(self.model, self.data, "pinch_site_target")
+
         self.end_effector_task.set_target(T_wt)
 
         # IK solving
@@ -113,7 +119,7 @@ class MujocoEnv:
     
         return obs
 
-    def run_one_episode(self):
+    def one_episode(self):
         """Run the simulation with rendering and camera functionality."""
         key_queue = queue.Queue()
     
@@ -123,7 +129,9 @@ class MujocoEnv:
     
         image_capture_interval = int(self.frequency / 10)  # Capture images every 10Hz
         step_counter = 0  # Counter to track simulation steps
-    
+        action = None
+        gripper_state = 0
+        
         with mj.viewer.launch_passive(
             model=self.model,
             data=self.data,
@@ -143,21 +151,28 @@ class MujocoEnv:
                 obs = {
                     'base_pose': np.zeros(3),
                     'arm_pos': self.data.mocap_pos[0],
-                    'arm_quat': self.data.mocap_quat[0][[1, 2, 3, 0]],
+                    'arm_quat': self.data.mocap_quat[0][[3, 1, 0, 2]] * [1, -1, 1, 1],
                     'gripper_pos': np.zeros(1),
                 }
     
                 # Capture images at 10Hz
-                if step_counter % image_capture_interval == 0:
+                if action and step_counter % image_capture_interval == 0:
                     camera_obs = self.observe_camera()  # Only capture images at 10Hz
+                    recorded_action = np.concatenate([action['arm_pos'], \
+					              action['arm_quat'], \
+						      action['gripper_pos']])
+                    print(recorded_action)
+                    self.recorder.record(ActMode.Dense, camera_obs, action=recorded_action)
     
                 # Compute action and step the simulation
                 action = self.teleop_policy.step(obs)
 
                 if action == "end_episode":
                     break
+               
+                gripper_state = gripper_state if not action else action['gripper_pos'] 
 
-                self.step(action, self.gripper_closed)
+                self.step(action, gripper_state)
     
                 # Sync the viewer and sleep to maintain frequency
                 viewer.sync()
@@ -165,6 +180,9 @@ class MujocoEnv:
     
                 # Increment the step counter
                 step_counter += 1
+
+        self.recorder.end_episode(save=True)
+        print('Done saving')
 
 if __name__ == "__main__":
     _HERE = Path(__file__).parent
@@ -175,4 +193,4 @@ if __name__ == "__main__":
     env.reset()
 
     while True:
-        env.run_one_episode()
+        env.one_episode()

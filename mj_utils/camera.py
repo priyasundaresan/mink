@@ -161,7 +161,6 @@ class Camera:
         depth_image = np.expand_dims(depth_image, axis=-1)  # Add a channel dimension
         return self._image, self._depth_image
 
-
     @property
     def point_cloud(self) -> np.ndarray:
         """Return the captured point cloud."""

@@ -57,18 +57,14 @@ class WebServer:
         print(f'Starting server at {address}:5001')
         self.socketio.run(self.app, host='0.0.0.0', port=5001)
 
-DEVICE_CAMERA_OFFSET = np.array([0.0, 0.02, -0.04])  # iPhone 14 Pro
-GAIN = 1
 
 # Convert coordinate system from WebXR to robot
 def convert_webxr_pose(pos, quat):
-    # WebXR: +x right, +y up, +z back; Robot: +x forward, +y left, +z up
-    pos = np.array([-pos['z'], -pos['x'], pos['y']], dtype=np.float64) * GAIN
+    DEVICE_CAMERA_OFFSET = np.array([-0.02, 0, -0.04])  # iPhone 14 Pro
+    pos = np.array([pos['x'], pos['z'], pos['y']], dtype=np.float64) 
     rot = R.from_quat([-quat['z'], -quat['x'], quat['y'], quat['w']])
-
-    # Apply offset so that rotations are around device center instead of device camera
+    ## Apply offset so that rotations are around device center instead of device camera
     pos = pos + rot.apply(DEVICE_CAMERA_OFFSET)
-
     return pos, rot
 
 TWO_PI = 2 * math.pi
