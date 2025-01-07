@@ -13,4 +13,4 @@ if __name__ == "__main__":
     env.reset()
 
     while True:
-        env.one_episode()
+        env.collect_episode()

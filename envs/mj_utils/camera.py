@@ -4,6 +4,7 @@ import numpy as np
 from datetime import datetime
 import open3d as o3d
 import cv2
+from envs.mj_utils.camera_utils import *
 
 class Camera:
     def __init__(self, model, data, cam_name: str = "", save_dir="data/img/"):
@@ -29,6 +30,9 @@ class Camera:
         self._renderer = mj.Renderer(self._model, self._height, self._width)
         self._camera = mj.MjvCamera()
         self._scene = mj.MjvScene(self._model, maxgeom=10_000)
+
+        self._K = self.K
+        self._T = self.T_world_cam
 
         self._image = np.zeros((self._height, self._width, 3), dtype=np.uint8)
         self._depth_image = np.zeros((self._height, self._width, 1), dtype=np.float32)
@@ -136,14 +140,7 @@ class Camera:
         return self.K @ self.T_world_cam
 
     @property
-    def rgbd_image(self) -> np.ndarray:
-        """
-        Capture and return a synchronized RGB-D image.
-    
-        Returns:
-        - np.ndarray: A single RGB-D image where the last dimension is 4 (RGB + Depth).
-        """
-        # Update the scene for both RGB and Depth rendering
+    def rgbd_obs(self) -> np.ndarray:
         self._renderer.update_scene(self._data, camera=self.name)
     
         # Capture RGB image
@@ -158,14 +155,15 @@ class Camera:
     
         # Combine RGB and Depth into a single RGB-D image
         # Normalize depth to match RGB dimensions if needed
-        depth_image = np.expand_dims(depth_image, axis=-1)  # Add a channel dimension
+        depth_image = np.expand_dims(depth_image, axis=-1)
+
         return self._image, self._depth_image
 
     @property
-    def point_cloud(self) -> np.ndarray:
+    def point_cloud_cam(self) -> np.ndarray:
         """Return the captured point cloud."""
-        self._point_cloud = self._depth_to_point_cloud(self.depth_image)
-        return self._point_cloud
+        self._point_cloud_cam = self._depth_to_point_cloud(self.depth_image)
+        return self._point_cloud_cam
 
     @property
     def fov(self) -> float:
@@ -241,6 +239,7 @@ class Camera:
         """
         self._image = self.image
         self._depth_image = self.depth_image
+        self._point_cloud_cam = self.point_cloud_cam
         self._point_cloud = self.point_cloud
         self._seg_image = self.seg_image
         if autosave:
