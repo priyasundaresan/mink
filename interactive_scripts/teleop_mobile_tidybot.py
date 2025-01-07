@@ -81,16 +81,6 @@ class MujocoEnv:
         mujoco.mj_step(self.model, self.data)
 
 
-@dataclass
-class KeyCallback:
-    gripper_closed: bool = False
-    pause: bool = False
-
-    def __call__(self, key: int) -> None:
-        if key == user_input.KEY_SPACE:
-            self.pause = not self.pause
-        elif key == user_input.KEY_P:
-            self.gripper_closed = not self.gripper_closed
 
 if __name__ == "__main__":
     _HERE = Path(__file__).parent
@@ -99,7 +89,6 @@ if __name__ == "__main__":
     env = MujocoEnv(_XML.as_posix())
     policy = TeleopPolicy()
     policy.reset()
-    key_callback = KeyCallback()
 
     env.reset()
     
@@ -110,24 +99,21 @@ if __name__ == "__main__":
         data=env.data,
         show_left_ui=False,
         show_right_ui=False,
-        key_callback=key_callback,
     ) as viewer:
 
         rate = RateLimiter(frequency=200.0, warn=False)
         mujoco.mjv_defaultFreeCamera(model, viewer.cam)
 
         while viewer.is_running():
-            if not key_callback.pause:
-                obs = {
-                    'base_pose': np.zeros(3),
-                    'arm_pos': env.data.mocap_pos[0],
-                    'arm_quat': env.data.mocap_quat[0][[3, 1, 0, 2]] * [1, -1, 1, 1],
-                    'gripper_pos': np.zeros(1),
-                }
-                action = policy.step(obs)
-                gripper_state = gripper_state if (not action or type(action) == str) else action['gripper_pos'] 
-                #env.step(action, key_callback.gripper_closed)
-                env.step(action, gripper_state)
+            obs = {
+                'base_pose': np.zeros(3),
+                'arm_pos': env.data.mocap_pos[0],
+                'arm_quat': env.data.mocap_quat[0][[3, 1, 0, 2]] * [1, -1, 1, 1],
+                'gripper_pos': np.zeros(1),
+            }
+            action = policy.step(obs)
+            gripper_state = gripper_state if (not action or type(action) == str) else action['gripper_pos'] 
+            env.step(action, gripper_state)
 
             viewer.sync()
             rate.sleep()
