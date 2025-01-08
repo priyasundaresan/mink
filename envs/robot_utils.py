@@ -2,6 +2,29 @@ from dataclasses import dataclass
 from scipy.spatial.transform import Rotation
 import numpy as np
 
+def quaternion_to_euler_diff(quat1, quat2):
+    """
+    Calculate the Euler angle difference between two quaternions.
+    
+    Args:
+        quat1: First quaternion as a list or numpy array [w, x, y, z].
+        quat2: Second quaternion as a list or numpy array [w, x, y, z].
+    
+    Returns:
+        euler_diff: Difference in Euler angles (roll, pitch, yaw) as a numpy array [roll_diff, pitch_diff, yaw_diff].
+    """
+    # Convert quaternions to scipy Rotation objects
+    rot1 = R.from_quat([quat1[1], quat1[2], quat1[3], quat1[0]])  # [x, y, z, w] format for scipy
+    rot2 = R.from_quat([quat2[1], quat2[2], quat2[3], quat2[0]])  # [x, y, z, w] format for scipy
+    
+    # Compute the relative rotation
+    relative_rotation = rot1.inv() * rot2
+    
+    # Convert the relative rotation to Euler angles (in radians)
+    euler_diff = relative_rotation.as_euler('xyz', degrees=False)  # Change 'xyz' to desired order
+    
+    return euler_diff
+
 @dataclass
 class Proprio:
     # supplied as arguments

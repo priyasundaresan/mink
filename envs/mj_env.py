@@ -3,15 +3,18 @@ import mujoco.viewer
 import numpy as np
 from pathlib import Path
 from loop_rate_limiters import RateLimiter
+import queue
 import mink
 from teleop.policies import TeleopPolicy
+from scipy.spatial.transform import Rotation as R
 from interactive_scripts.dataset_recorder import DatasetRecorder, ActMode
 from envs.mj_utils.camera import Camera
-from envs.robot_utils import Proprio
+from envs.robot_utils import Proprio, quaternion_to_euler_diff
 from dataclasses import dataclass, field
 from common_utils import Stopwatch
 import pyrallis
 import argparse
+from dm_control.viewer import user_input
 
 @dataclass
 class MujocoEnvConfig:
@@ -30,6 +33,7 @@ class MujocoEnv:
         self.data_folder = cfg.data_folder
 
         self.recorder = DatasetRecorder(self.data_folder)
+        self.stopwatch = Stopwatch()
 
         # Camera setup
         self.cameras = {camera_name: Camera(self.model, self.data, camera_name) for camera_name in cfg.cameras}
@@ -65,6 +69,7 @@ class MujocoEnv:
         self.fingers_actuator_id = self.model.actuator("fingers_actuator").id
         self.tendon_index = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_TENDON, "split")
         self.eef_index = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, "base")
+        self.pinch_site_index = mj.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "pinch_site")
 
         self.frequency = 200.0
         self.rate_limiter = RateLimiter(frequency=self.frequency, warn=False)
@@ -83,7 +88,7 @@ class MujocoEnv:
             self.model, self.data, "pinch_site_target", "pinch_site", "site"
         )
 
-    def step(self, action, gripper_closed):
+    def step(self, action, gripper_closed, is_delta=False):
 
         # Update mocap target from action
         if isinstance(action, dict):
@@ -133,8 +138,15 @@ class MujocoEnv:
     def observe_proprio(self) -> Proprio:
         configuration = self.configuration.q[self.dof_ids]
         gripper_width = 1.0 - self.data.ten_length[self.tendon_index]
-        eef_pos = self.data.xpos[self.eef_index]
-        eef_quat = self.data.xquat[self.eef_index]
+
+        #eef_pos = self.data.xpos[self.eef_index]
+        #eef_quat = self.data.xquat[self.eef_index]
+
+        #TODO - bit of a hack
+        eef_pos = self.data.site_xpos[self.pinch_site_index]
+        eef_quat= R.from_matrix(self.data.site_xmat[self.pinch_site_index].reshape(3, 3)).as_quat()
+        eef_quat = eef_quat[[1, 0, 2, 3]] * [1, -1, 1, 1]
+
         proprio = Proprio(
             base_xy_th=configuration[:3],
             eef_pos=eef_pos,
@@ -149,6 +161,7 @@ class MujocoEnv:
 
         proprio = self.observe_proprio()
         obs["base_xy_th"] = proprio.base_xy_th
+        obs["eef_pos"] = proprio.eef_pos
         obs["eef_euler"] = proprio.eef_euler
         obs["eef_quat"] = proprio.eef_quat
         obs["joint_pos"] = proprio.joint_pos
@@ -160,6 +173,12 @@ class MujocoEnv:
         #    obs["sim_state"] = self.env.sim.get_state().flatten()
 
         return obs
+
+    def keyboard_callback(self, key):
+        """Handle keyboard input."""
+        if key == user_input.KEY_SPACE:
+            return True
+        return False
 
     def collect_episode(self):
         """Run the simulation with rendering and camera functionality."""
@@ -198,10 +217,16 @@ class MujocoEnv:
     
                 # Capture images at 10Hz
                 if action and step_counter % image_capture_interval == 0:
-                    record_obs = self.observe()  # Only capture observations at 10Hz
+                    with self.stopwatch.time("observe"):
+                        record_obs = self.observe()  # Only capture observations at 10Hz
                     record_action = np.concatenate([action['arm_pos'], \
 					              action['arm_quat'], \
 						      action['gripper_pos']])
+
+                    #delta_pos = action['arm_pos'] - record_obs['eef_pos']
+                    #delta_euler = quaternion_to_euler_diff(action['arm_quat'], \
+		    #    				   record_obs['eef_quat'])
+
                     self.recorder.record(ActMode.Dense, record_obs, action=record_action)
     
                 # Compute action and step the simulation
@@ -211,7 +236,9 @@ class MujocoEnv:
                     break
                
                 gripper_state = gripper_state if not action else action['gripper_pos'] 
-                self.step(action, gripper_state)
+
+                with self.stopwatch.time("step"):
+                    self.step(action, gripper_state)
     
                 # Sync the viewer and sleep to maintain frequency
                 viewer.sync()
@@ -221,11 +248,14 @@ class MujocoEnv:
                 step_counter += 1
 
         self.recorder.end_episode(save=True)
+        self.stopwatch.summary()
         print('Done saving')
 
-    def replay_episode(self, demo):
+    def replay_episode(self, episode_fn):
+        demo = np.load(episode_fn, allow_pickle=True)['arr_0']
         # Reset
         self.reset()
+
 
         traj = []
         for t, step in enumerate(list(demo)):
@@ -249,6 +279,7 @@ class MujocoEnv:
             while viewer.is_running() and len(traj):
                 # Capture images at 10Hz
                 if step_counter % image_capture_interval == 0:
+
                     recorded_action = traj.pop(0)
                     action = {
                         'base_pose': np.zeros(3),
@@ -258,6 +289,69 @@ class MujocoEnv:
                         'base_image': np.zeros((640, 360, 3)),
                         'wrist_image': np.zeros((640, 480, 3)),
                     }
+                    
+                gripper_state = gripper_state if not action else action['gripper_pos'] 
+                self.step(action, gripper_state)
+    
+                # Sync the viewer and sleep to maintain frequency
+                viewer.sync()
+                self.rate_limiter.sleep()
+    
+                # Increment the step counter
+                step_counter += 1
+
+    def relabel_episode(self, episode_fn):
+        demo = np.load(episode_fn, allow_pickle=True)['arr_0']
+        key_queue = queue.Queue()
+
+        # Reset
+        self.reset()
+
+        traj = []
+        for t, step in enumerate(list(demo)):
+            action = step["action"]
+            traj.append(action)
+
+        episode_counter = 0
+        waypoint_idxs = []
+
+        image_capture_interval = int(self.frequency / 10)  # Capture images every 10Hz
+        step_counter = 0  # Counter to track simulation steps
+        action = None
+        gripper_state = 0
+        
+        with mj.viewer.launch_passive(
+            model=self.model,
+            data=self.data,
+            show_left_ui=False,
+            show_right_ui=False,
+            key_callback=lambda key: key_queue.put(key)
+        ) as viewer:
+    
+            mj.mjv_defaultFreeCamera(self.model, viewer.cam)
+    
+            while viewer.is_running() and len(traj):
+
+                # Capture images at 10Hz
+                if step_counter % image_capture_interval == 0:
+                    recorded_action = traj.pop(0)
+
+                    # Collect and process key inputs
+                    while not key_queue.empty():
+                        if self.keyboard_callback(key_queue.get()):
+                            print('Labeled waypoint')
+                            waypoint_idxs.append(episode_counter)
+
+                    action = {
+                        'base_pose': np.zeros(3),
+                        'arm_pos': recorded_action[:3],
+                        'arm_quat': recorded_action[3:7],
+                        'gripper_pos': np.array(recorded_action[-1]),
+                        'base_image': np.zeros((640, 360, 3)),
+                        'wrist_image': np.zeros((640, 480, 3)),
+                    }
+
+                    episode_counter += 1
                     
                 gripper_state = gripper_state if not action else action['gripper_pos'] 
                 self.step(action, gripper_state)
@@ -280,12 +374,11 @@ if __name__ == "__main__":
     env = MujocoEnv(env_cfg)
 
     #env.reset()
-    #stopwatch = Stopwatch()
+    stopwatch = Stopwatch()
     #for i in range(30):
     #    with stopwatch.time("observe_camera"):
     #        env.observe_camera()
     #stopwatch.summary()
 
-    demo = np.load("dev1/demo00000.npz", allow_pickle=True)['arr_0']
-    env.replay_episode(demo)
-
+    env.replay_episode("dev1/demo00000.npz")
+    #env.relabel_episode("dev1/demo00000.npz")
