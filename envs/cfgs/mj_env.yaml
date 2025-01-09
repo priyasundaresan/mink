@@ -5,5 +5,4 @@ cameras:
 xml_file: interactive_scripts/stanford_tidybot/scene.xml
 data_folder: dev1
 image_size: 224
-record_sim_state: 0
 crop_floor: 1

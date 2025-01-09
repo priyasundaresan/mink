@@ -9,12 +9,13 @@ from teleop.policies import TeleopPolicy
 from scipy.spatial.transform import Rotation as R
 from interactive_scripts.dataset_recorder import DatasetRecorder, ActMode
 from envs.mj_utils.camera import Camera
-from envs.robot_utils import Proprio, quaternion_to_euler_diff
+from envs.robot_utils import Proprio, LinearWaypointReach
 from dataclasses import dataclass, field
 from common_utils import Stopwatch
 import pyrallis
 import argparse
 from dm_control.viewer import user_input
+import os
 
 @dataclass
 class MujocoEnvConfig:
@@ -22,7 +23,6 @@ class MujocoEnvConfig:
     xml_file: str
     data_folder: str
     image_size: int
-    record_sim_state: int = 0
     crop_floor: int = 1
 
 class MujocoEnv:
@@ -142,7 +142,7 @@ class MujocoEnv:
         #eef_pos = self.data.xpos[self.eef_index]
         #eef_quat = self.data.xquat[self.eef_index]
 
-        #TODO - bit of a hack
+        #TODO: bit of a hack
         eef_pos = self.data.site_xpos[self.pinch_site_index]
         eef_quat= R.from_matrix(self.data.site_xmat[self.pinch_site_index].reshape(3, 3)).as_quat()
         eef_quat = eef_quat[[1, 0, 2, 3]] * [1, -1, 1, 1]
@@ -157,9 +157,12 @@ class MujocoEnv:
         return proprio
 
     def observe(self) -> dict[str, np.ndarray]:
-        obs = self.observe_camera()
+        with self.stopwatch.time("observe_camera"):
+            obs = self.observe_camera()
 
-        proprio = self.observe_proprio()
+        with self.stopwatch.time("observe_proprio"):
+            proprio = self.observe_proprio()
+
         obs["base_xy_th"] = proprio.base_xy_th
         obs["eef_pos"] = proprio.eef_pos
         obs["eef_euler"] = proprio.eef_euler
@@ -167,10 +170,6 @@ class MujocoEnv:
         obs["joint_pos"] = proprio.joint_pos
         obs["gripper_width"] = proprio.gripper_width_np
         obs["proprio"] = proprio.eef_pos_euler_grip
-
-        #if self.cfg.record_sim_state:
-        #    # obs["model"] = self.env.sim.model.get_xml()
-        #    obs["sim_state"] = self.env.sim.get_state().flatten()
 
         return obs
 
@@ -219,8 +218,9 @@ class MujocoEnv:
                 if action and step_counter % image_capture_interval == 0:
                     with self.stopwatch.time("observe"):
                         record_obs = self.observe()  # Only capture observations at 10Hz
+                    action['arm_euler'] = R.from_quat(action['arm_quat']).as_euler('xyz')
                     record_action = np.concatenate([action['arm_pos'], \
-					              action['arm_quat'], \
+					              action['arm_euler'], \
 						      action['gripper_pos']])
 
                     #delta_pos = action['arm_pos'] - record_obs['eef_pos']
@@ -257,10 +257,9 @@ class MujocoEnv:
         self.reset()
 
 
-        traj = []
+        episode = []
         for t, step in enumerate(list(demo)):
-            action = step["action"]
-            traj.append(action)
+            episode.append(step)
 
         image_capture_interval = int(self.frequency / 10)  # Capture images every 10Hz
         step_counter = 0  # Counter to track simulation steps
@@ -276,15 +275,29 @@ class MujocoEnv:
     
             mj.mjv_defaultFreeCamera(self.model, viewer.cam)
     
-            while viewer.is_running() and len(traj):
+            while viewer.is_running() and len(episode):
                 # Capture images at 10Hz
                 if step_counter % image_capture_interval == 0:
 
-                    recorded_action = traj.pop(0)
+                    step = episode.pop(0)
+
+                    mode = step['mode']
+                    recorded_action = step['action']
+
+                    if mode == ActMode.Waypoint:
+                        continue
+
+                    elif mode == ActMode.Interpolate:
+                        proprio = self.observe_proprio()
+                        curr_eef_pos = proprio.eef_pos
+                        curr_eef_euler = proprio.eef_euler
+                        recorded_action[:3] += curr_eef_pos
+                        recorded_action[3:6] += curr_eef_euler
+
                     action = {
                         'base_pose': np.zeros(3),
                         'arm_pos': recorded_action[:3],
-                        'arm_quat': recorded_action[3:7],
+                        'arm_quat': R.from_euler('xyz', recorded_action[3:6]).as_quat(),
                         'gripper_pos': np.array(recorded_action[-1]),
                         'base_image': np.zeros((640, 360, 3)),
                         'wrist_image': np.zeros((640, 480, 3)),
@@ -345,7 +358,7 @@ class MujocoEnv:
                     action = {
                         'base_pose': np.zeros(3),
                         'arm_pos': recorded_action[:3],
-                        'arm_quat': recorded_action[3:7],
+                        'arm_quat': R.from_euler('xyz', recorded_action[3:6]).as_quat(),
                         'gripper_pos': np.array(recorded_action[-1]),
                         'base_image': np.zeros((640, 360, 3)),
                         'wrist_image': np.zeros((640, 480, 3)),
@@ -363,6 +376,73 @@ class MujocoEnv:
                 # Increment the step counter
                 step_counter += 1
 
+        waypoint_idx = 0
+        curr_waypoint_step = 0
+        prev_waypoint_step = 0
+        relabeled_demo = []
+        waypoint_interpolator = None
+
+        for t, step in enumerate(list(demo)):
+
+            if t == curr_waypoint_step and len(waypoint_idxs):
+                waypoint_action = list(demo)[waypoint_idxs[0]]['action'] 
+                curr_obs = step['obs']
+
+                #initial_pos = curr_obs['eef_pos']
+                #initial_euler = curr_obs['eef_euler']
+
+                initial_pos = list(demo)[prev_waypoint_step]['obs']['eef_pos']
+                initial_euler = list(demo)[prev_waypoint_step]['obs']['eef_euler']
+
+                target_pos = waypoint_action[:3]
+                target_euler = waypoint_action[3:6]
+
+
+                step['action'] = waypoint_action
+                step['mode'] = ActMode.Waypoint
+
+                prev_waypoint_step = curr_waypoint_step
+                curr_waypoint_step = waypoint_idxs.pop(0)
+
+                waypoint_interpolator = LinearWaypointReach(
+                    initial_pos,
+                    initial_euler,
+                    target_pos,
+                    target_euler,
+                    curr_waypoint_step - t,
+
+                )
+
+                sum_pos = np.zeros(3)
+                sum_euler = np.zeros(3)
+                for t in range(curr_waypoint_step - t):
+                    a_t = waypoint_interpolator.step(t)
+                    sum_pos += a_t[0]
+                    sum_euler += a_t[1]
+
+                #print(initial_pos, target_pos, initial_pos + sum_pos)
+                #print(initial_euler, target_euler, initial_euler + sum_euler)
+
+                step['waypoint_idx'] = waypoint_idx
+                waypoint_idx += 1
+
+            else:
+                assert(waypoint_interpolator is not None)
+                t_interp = t - prev_waypoint_step
+            
+                delta_pos, delta_euler, reached = waypoint_interpolator.step(t_interp)
+                step['action'][:6] = np.concatenate((delta_pos, delta_euler)).tolist()
+                step['mode'] = ActMode.Interpolate
+                step['waypoint_idx'] = waypoint_idx-1
+            
+        for t, step in enumerate(list(demo)):
+            print(step['mode'], step['waypoint_idx'], step['action'])
+
+        if not os.path.exists('devrelabel'):
+            os.mkdir('devrelabel')
+
+        np.savez(episode_fn.replace('dev1', 'devrelabel'), demo)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--env_cfg", type=str, default="envs/cfgs/mj_env.yaml")
@@ -373,12 +453,6 @@ if __name__ == "__main__":
     # Create and run the environment
     env = MujocoEnv(env_cfg)
 
-    #env.reset()
-    stopwatch = Stopwatch()
-    #for i in range(30):
-    #    with stopwatch.time("observe_camera"):
-    #        env.observe_camera()
-    #stopwatch.summary()
-
     env.replay_episode("dev1/demo00000.npz")
     #env.relabel_episode("dev1/demo00000.npz")
+    #env.replay_episode("devrelabel/demo00000.npz")
