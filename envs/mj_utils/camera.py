@@ -32,7 +32,6 @@ class Camera:
         self._scene = mj.MjvScene(self._model, maxgeom=10_000)
 
         self._K = self.K
-        self._T = self.T_world_cam
 
         self._image = np.zeros((self._height, self._width, 3), dtype=np.uint8)
         self._depth_image = np.zeros((self._height, self._width, 1), dtype=np.float32)
@@ -107,24 +106,33 @@ class Camera:
 
         # Intrinsic camera matrix K
         K = np.array([[alpha_u, 0, u_0], [0, alpha_v, v_0], [0, 0, 1]])
-
         return K
 
     @property
     def T_world_cam(self) -> np.ndarray:
         """
-        Compute the homogeneous transformation matrix for the camera.
-
-        The transformation matrix is computed from the camera's position and orientation.
-        The position and orientation are retrieved from the camera data.
-
+        Compute the homogeneous transformation matrix for the camera, taking into
+        account the base's transformation in the world frame.
+    
         Returns:
-        np.ndarray: The 4x4 homogeneous transformation matrix representing the camera's pose.
+        np.ndarray: The 4x4 homogeneous transformation matrix representing the camera's pose in the world frame.
         """
-        pos = self._data.cam(self._cam_id).xpos
-        rot = self._data.cam(self._cam_id).xmat.reshape(3, 3).T
-        T = make_tf(pos=pos, ori=rot).A
-        return T
+        # Transformation from the camera to the base frame
+        cam_pos = self._data.cam(self._cam_id).xpos
+        cam_rot = self._data.cam(self._cam_id).xmat.reshape(3, 3)
+        T_world_cam = make_tf(pos=cam_pos, ori=cam_rot).A
+
+        camera_axis_correction = np.array(
+            [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0, 0.0],
+                [0.0, 0.0, -1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
+        )
+        T_world_cam = T_world_cam @ camera_axis_correction
+    
+        return T_world_cam
 
     @property
     def P(self) -> np.ndarray:
@@ -153,8 +161,6 @@ class Camera:
         self._depth_image = depth_image
         self._renderer.disable_depth_rendering()
     
-        # Combine RGB and Depth into a single RGB-D image
-        # Normalize depth to match RGB dimensions if needed
         depth_image = np.expand_dims(depth_image, axis=-1)
 
         return self._image, self._depth_image

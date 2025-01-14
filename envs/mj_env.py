@@ -9,7 +9,7 @@ from teleop.policies import TeleopPolicy
 from scipy.spatial.transform import Rotation as R
 from interactive_scripts.dataset_recorder import DatasetRecorder, ActMode
 from envs.mj_utils.camera import Camera
-from envs.robot_utils import Proprio, LinearWaypointReach
+from envs.robot_utils import Proprio, LinearWaypointReach, quaternion_to_euler_diff
 from dataclasses import dataclass, field
 from common_utils import Stopwatch
 import pyrallis
@@ -131,7 +131,7 @@ class MujocoEnv:
             obs["%s_image"%name] = rgb_image
             obs["%s_depth"%name] = depth_image
             obs["%s_K"%name] = camera._K
-            obs["%s_T"%name] = camera._T
+            obs["%s_T"%name] = camera.T_world_cam
     
         return obs
 
@@ -216,18 +216,27 @@ class MujocoEnv:
     
                 # Capture images at 10Hz
                 if action and step_counter % image_capture_interval == 0:
+
                     with self.stopwatch.time("observe"):
                         record_obs = self.observe()  # Only capture observations at 10Hz
+
                     action['arm_euler'] = R.from_quat(action['arm_quat']).as_euler('xyz')
+
+                    # Absolute action to record
                     record_action = np.concatenate([action['arm_pos'], \
 					              action['arm_euler'], \
 						      action['gripper_pos']])
 
-                    #delta_pos = action['arm_pos'] - record_obs['eef_pos']
-                    #delta_euler = quaternion_to_euler_diff(action['arm_quat'], \
-		    #    				   record_obs['eef_quat'])
+                    delta_pos = action['arm_pos'] - record_obs['eef_pos']
+                    delta_euler = quaternion_to_euler_diff(action['arm_quat'], \
+		        				   record_obs['eef_quat'])
 
-                    self.recorder.record(ActMode.Dense, record_obs, action=record_action)
+                    # Delta action to record
+                    record_delta_action = np.concatenate([delta_pos, \
+					              delta_euler, \
+						      action['gripper_pos']])
+
+                    self.recorder.record(ActMode.Dense, record_obs, action=record_action, delta_action=record_delta_action)
     
                 # Compute action and step the simulation
                 action = self.teleop_policy.step(obs)
@@ -281,19 +290,11 @@ class MujocoEnv:
 
                     step = episode.pop(0)
 
-                    mode = step['mode']
+                    recorded_obs = step['obs']
                     recorded_action = step['action']
+                    recorded_delta_action = step['delta_action']
 
-                    if mode == ActMode.Waypoint:
-                        continue
-
-                    elif mode == ActMode.Interpolate:
-                        proprio = self.observe_proprio()
-                        curr_eef_pos = proprio.eef_pos
-                        curr_eef_euler = proprio.eef_euler
-                        recorded_action[:3] += curr_eef_pos
-                        recorded_action[3:6] += curr_eef_euler
-
+                    ## Absolute Replay
                     action = {
                         'base_pose': np.zeros(3),
                         'arm_pos': recorded_action[:3],
@@ -302,6 +303,19 @@ class MujocoEnv:
                         'base_image': np.zeros((640, 360, 3)),
                         'wrist_image': np.zeros((640, 480, 3)),
                     }
+
+                    #### Delta Replay
+                    #obs_eef_pos = recorded_obs['eef_pos']
+                    #obs_eef_euler = recorded_obs['eef_euler']
+
+                    #action = {
+                    #    'base_pose': np.zeros(3),
+                    #    'arm_pos': recorded_delta_action[:3] + obs_eef_pos,
+                    #    'arm_quat': R.from_euler('xyz', recorded_delta_action[3:6] + obs_eef_euler).as_quat(),
+                    #    'gripper_pos': np.array(recorded_delta_action[-1]),
+                    #    'base_image': np.zeros((640, 360, 3)),
+                    #    'wrist_image': np.zeros((640, 480, 3)),
+                    #}
                     
                 gripper_state = gripper_state if not action else action['gripper_pos'] 
                 self.step(action, gripper_state)
@@ -376,65 +390,24 @@ class MujocoEnv:
                 # Increment the step counter
                 step_counter += 1
 
-        waypoint_idx = 0
+        waypoint_idx = -1
         curr_waypoint_step = 0
-        prev_waypoint_step = 0
-        relabeled_demo = []
-        waypoint_interpolator = None
 
         for t, step in enumerate(list(demo)):
 
             if t == curr_waypoint_step and len(waypoint_idxs):
+
                 waypoint_action = list(demo)[waypoint_idxs[0]]['action'] 
-                curr_obs = step['obs']
-
-                #initial_pos = curr_obs['eef_pos']
-                #initial_euler = curr_obs['eef_euler']
-
-                initial_pos = list(demo)[prev_waypoint_step]['obs']['eef_pos']
-                initial_euler = list(demo)[prev_waypoint_step]['obs']['eef_euler']
-
-                target_pos = waypoint_action[:3]
-                target_euler = waypoint_action[3:6]
-
 
                 step['action'] = waypoint_action
                 step['mode'] = ActMode.Waypoint
-
-                prev_waypoint_step = curr_waypoint_step
-                curr_waypoint_step = waypoint_idxs.pop(0)
-
-                waypoint_interpolator = LinearWaypointReach(
-                    initial_pos,
-                    initial_euler,
-                    target_pos,
-                    target_euler,
-                    curr_waypoint_step - t,
-
-                )
-
-                sum_pos = np.zeros(3)
-                sum_euler = np.zeros(3)
-                for t in range(curr_waypoint_step - t):
-                    a_t = waypoint_interpolator.step(t)
-                    sum_pos += a_t[0]
-                    sum_euler += a_t[1]
-
-                #print(initial_pos, target_pos, initial_pos + sum_pos)
-                #print(initial_euler, target_euler, initial_euler + sum_euler)
-
                 step['waypoint_idx'] = waypoint_idx
+
+                curr_waypoint_step = waypoint_idxs.pop(0)
                 waypoint_idx += 1
 
-            else:
-                assert(waypoint_interpolator is not None)
-                t_interp = t - prev_waypoint_step
-            
-                delta_pos, delta_euler, reached = waypoint_interpolator.step(t_interp)
-                step['action'][:6] = np.concatenate((delta_pos, delta_euler)).tolist()
-                step['mode'] = ActMode.Interpolate
-                step['waypoint_idx'] = waypoint_idx-1
-            
+            step['waypoint_idx'] = waypoint_idx
+
         for t, step in enumerate(list(demo)):
             print(step['mode'], step['waypoint_idx'], step['action'])
 
@@ -453,6 +426,5 @@ if __name__ == "__main__":
     # Create and run the environment
     env = MujocoEnv(env_cfg)
 
-    env.replay_episode("dev1/demo00000.npz")
-    #env.relabel_episode("dev1/demo00000.npz")
-    #env.replay_episode("devrelabel/demo00000.npz")
+    #env.replay_episode("dev1/demo00000.npz")
+    env.relabel_episode("dev1/demo00000.npz")

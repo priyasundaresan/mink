@@ -44,6 +44,7 @@ class DatasetRecorder:
         mode: ActMode,
         obs: dict[str, np.ndarray],
         action: np.ndarray,
+        delta_action: np.ndarray,
         click_pos: Optional[np.ndarray] = None,
         reward: Optional[float] = None
     ):
@@ -62,6 +63,7 @@ class DatasetRecorder:
         data = {
             "obs": obs,
             "action": action,
+            "delta_action": delta_action,
             "mode": mode,
             "waypoint_idx": waypoint_idx,
             "click": click_pos,

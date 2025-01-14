@@ -4,7 +4,67 @@ import numpy as np
 import pandas as pd
 import spatialmath as sm
 import spatialmath.base as smb
+import open3d as o3d
 
+from scipy.spatial.transform import Rotation as R
+
+def depth_to_point_cloud(depth_image, K, T) -> np.ndarray:
+    # Get image dimensions
+    dimg_shape = depth_image.shape
+    height = dimg_shape[0]
+    width = dimg_shape[1]
+
+    # Create pixel grid
+    y, x = np.meshgrid(np.arange(height), np.arange(width), indexing="ij")
+
+    # Flatten arrays for vectorized computation
+    x_flat = x.flatten()
+    y_flat = y.flatten()
+    depth_flat = depth_image.flatten()
+
+    # Stack flattened arrays to form homogeneous coordinates
+    homogeneous_coords = np.vstack((x_flat, y_flat, np.ones_like(x_flat)))
+
+    # Compute inverse of the intrinsic matrix K
+    K_inv = np.linalg.inv(K)
+
+    # Calculate 3D points in camera coordinates
+    points_camera = np.dot(K_inv, homogeneous_coords) * depth_flat
+
+    # Homogeneous coordinates to 3D points
+    points_camera_homog = np.vstack((points_camera, np.ones_like(x_flat)))
+
+    points_world_homog = np.dot(T, points_camera_homog)
+
+    # dehomogenize
+    points_world = points_world_homog[:3, :].T
+    return points_world
+
+def pcl_from_obs(obs):
+
+    merged_points = []
+    merged_colors = []
+
+    # Process each view (base1, base2)
+    for view in ['base1', 'base2']:
+
+        rgb_image = obs['%s_image'%view]
+        depth_image = obs['%s_depth'%view]
+        
+        extrinsics = obs['%s_T'%view]
+        intrinsics = obs['%s_K'%view]
+
+        points = depth_to_point_cloud(depth_image, intrinsics, extrinsics)
+        colors = rgb_image.reshape(points.shape) / 255  # Normalize color values
+
+        merged_points.append(points)
+        merged_colors.append(colors)
+
+    # Merge the point clouds
+    point_cloud = o3d.geometry.PointCloud()
+    point_cloud.points = o3d.utility.Vector3dVector(np.vstack(merged_points))
+    point_cloud.colors = o3d.utility.Vector3dVector(np.vstack(merged_colors))
+    o3d.visualization.draw_geometries([point_cloud])
 
 def make_tf(
     pos: Union[np.ndarray, list] = [0, 0, 0],
