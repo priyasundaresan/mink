@@ -17,6 +17,20 @@ import argparse
 from dm_control.viewer import user_input
 import os
 
+def add_text(pos, viewer, input):
+    # create an invisibale geom and add label on it
+    geom = viewer.user_scn.geoms[viewer.user_scn.ngeom]
+    mujoco.mjv_initGeom(
+        geom,
+        type=mujoco.mjtGeom.mjGEOM_LABEL,
+        size=np.array([0.55, 0.55, 0.55]),  # label_size
+        pos=pos+np.array([0.0, 0.0, 0.1]),  # lebel position, here is 1 meter above the root joint
+        mat=np.eye(3).flatten(),  # label orientation, here is no rotation
+        rgba=np.array([1, 0, 0, 0])  # invisible
+    )
+    geom.label = input  # receive string input only
+    viewer.user_scn.ngeom += 1
+
 @dataclass
 class MujocoEnvConfig:
     cameras: list[str]
@@ -29,6 +43,8 @@ class MujocoEnv:
     def __init__(self, cfg: MujocoEnvConfig):
         self.cfg = cfg
         self.model = mj.MjModel.from_xml_path(cfg.xml_file)
+        self.model.vis.map.znear = 0.01
+        self.model.vis.map.zfar = 8.0
         self.data = mj.MjData(self.model)
         self.data_folder = cfg.data_folder
 
@@ -87,6 +103,13 @@ class MujocoEnv:
         mink.move_mocap_to_frame(
             self.model, self.data, "pinch_site_target", "pinch_site", "site"
         )
+        
+        # Randomize the position of the cube
+        randomized_position = np.random.uniform(low=(-0.07,-0.2,0), high=(0.07,0.2,0), size=3)
+        randomized_position[2] = 0.05
+        cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, "interactive_cube")
+        self.data.xpos[cube_body_id] += randomized_position
+        self.data.qpos[self.model.joint("cube_freejoint").id : self.model.joint("cube_freejoint").id + 3] += randomized_position
 
     def step(self, action, gripper_closed, is_delta=False):
 
@@ -187,6 +210,9 @@ class MujocoEnv:
             self.teleop_policy = TeleopPolicy()
         self.teleop_policy.reset()
 
+        # Seed based on episode idx 
+        print('Seeding with %d'%self.recorder.episode_idx)
+        np.random.seed(self.recorder.episode_idx)
         self.reset()
     
         image_capture_interval = int(self.frequency / 10)  # Capture images every 10Hz
@@ -262,9 +288,10 @@ class MujocoEnv:
 
     def replay_episode(self, episode_fn):
         demo = np.load(episode_fn, allow_pickle=True)['arr_0']
-        # Reset
-        self.reset()
 
+        # Reset and seed based on episode idx
+        np.random.seed(int(episode_fn.split('demo')[1].split('.npz')[0]))
+        self.reset()
 
         episode = []
         for t, step in enumerate(list(demo)):
@@ -331,7 +358,8 @@ class MujocoEnv:
         demo = np.load(episode_fn, allow_pickle=True)['arr_0']
         key_queue = queue.Queue()
 
-        # Reset
+        # Reset and seed based on episode idx
+        np.random.seed(int(episode_fn.split('demo')[1].split('.npz')[0]))
         self.reset()
 
         traj = []
@@ -366,8 +394,8 @@ class MujocoEnv:
                     # Collect and process key inputs
                     while not key_queue.empty():
                         if self.keyboard_callback(key_queue.get()):
-                            print('Labeled waypoint')
                             waypoint_idxs.append(episode_counter)
+                            add_text(recorded_action[:3], viewer, str(len(waypoint_idxs)-1))
 
                     action = {
                         'base_pose': np.zeros(3),
@@ -426,5 +454,6 @@ if __name__ == "__main__":
     # Create and run the environment
     env = MujocoEnv(env_cfg)
 
-    #env.replay_episode("dev1/demo00000.npz")
-    env.relabel_episode("dev1/demo00000.npz")
+    for fn in os.listdir("dev1"):
+        if 'npz' in fn:
+            env.relabel_episode("dev1/%s"%fn)

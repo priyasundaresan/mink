@@ -4,8 +4,6 @@ import numpy as np
 import pandas as pd
 import spatialmath as sm
 import spatialmath.base as smb
-import open3d as o3d
-
 from scipy.spatial.transform import Rotation as R
 
 def depth_to_point_cloud(depth_image, K, T) -> np.ndarray:
@@ -33,7 +31,6 @@ def depth_to_point_cloud(depth_image, K, T) -> np.ndarray:
 
     # Homogeneous coordinates to 3D points
     points_camera_homog = np.vstack((points_camera, np.ones_like(x_flat)))
-
     points_world_homog = np.dot(T, points_camera_homog)
 
     # dehomogenize
@@ -41,7 +38,6 @@ def depth_to_point_cloud(depth_image, K, T) -> np.ndarray:
     return points_world
 
 def pcl_from_obs(obs):
-
     merged_points = []
     merged_colors = []
 
@@ -57,14 +53,16 @@ def pcl_from_obs(obs):
         points = depth_to_point_cloud(depth_image, intrinsics, extrinsics)
         colors = rgb_image.reshape(points.shape) / 255  # Normalize color values
 
+        z_mask = points[..., 2] > 0.0
+        points = points[z_mask]
+        colors = colors[z_mask]
+
         merged_points.append(points)
         merged_colors.append(colors)
 
-    # Merge the point clouds
-    point_cloud = o3d.geometry.PointCloud()
-    point_cloud.points = o3d.utility.Vector3dVector(np.vstack(merged_points))
-    point_cloud.colors = o3d.utility.Vector3dVector(np.vstack(merged_colors))
-    o3d.visualization.draw_geometries([point_cloud])
+    merged_points = np.vstack(merged_points)
+    merged_colors = np.vstack(merged_colors)
+    return merged_points, merged_colors
 
 def make_tf(
     pos: Union[np.ndarray, list] = [0, 0, 0],

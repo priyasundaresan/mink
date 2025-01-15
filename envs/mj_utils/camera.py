@@ -82,31 +82,44 @@ class Camera:
 
     @property
     def K(self) -> np.ndarray:
-        """
-        Compute the intrinsic camera matrix (K) based on the camera's field of view (fov),
-        width (_width), and height (_height) parameters, following the pinhole camera model.
-
-        Returns:
-        np.ndarray: The intrinsic camera matrix (K), a 3x3 array representing the camera's intrinsic parameters.
-        """
-        # Convert the field of view from degrees to radians
-        theta = np.deg2rad(self.fov)
-
-        # Focal length calculation (f in terms of sensor width and height)
-        f_x = (self._width / 2) / np.tan(theta / 2)
-        f_y = (self._height / 2) / np.tan(theta / 2)
-
-        # Pixel resolution (assumed to be focal length per pixel unit)
-        alpha_u = f_x  # focal length in terms of pixel width
-        alpha_v = f_y  # focal length in terms of pixel height
-
-        # Optical center offsets (assuming they are at the center of the sensor)
-        u_0 = (self._width - 1) / 2.0
-        v_0 = (self._height - 1) / 2.0
-
-        # Intrinsic camera matrix K
-        K = np.array([[alpha_u, 0, u_0], [0, alpha_v, v_0], [0, 0, 1]])
+        fy = 0.5 * self._height / np.tan(self.fov * np.pi / 360)  # Vertical focal length
+        fx = fy * (self._width / self._height)  # Horizontal focal length based on aspect ratio
+        K = np.array([
+            [fx, 0, self._width / 2],  # Intrinsics for x-axis
+            [0, fy, self._height / 2],  # Intrinsics for y-axis
+            [0, 0, 1]  # Homogeneous coordinates
+        ])
         return K
+    
+        #"""
+        #Compute the intrinsic camera matrix (K) based on the camera's vertical field of view (fovy),
+        #resolution (_width, _height), and the pinhole camera model.
+    
+        #Returns:
+        #np.ndarray: The intrinsic camera matrix (K), a 3x3 array representing the camera's intrinsic parameters.
+        #"""
+        ## Convert the vertical field of view (fovy) from degrees to radians
+        #theta_v = np.deg2rad(self.fov)  # Vertical field of view in radians
+    
+        ## Focal length in pixels (vertical direction)
+        #f_y = (self._height / 2) / np.tan(theta_v / 2)
+    
+        ## Aspect ratio
+        #aspect_ratio = self._width / self._height
+    
+        ## Focal length in pixels (horizontal direction)
+        #f_x = f_y * aspect_ratio  # Maintain the aspect ratio for f_x
+    
+        ## Optical center (assume it's at the center of the image sensor)
+        #u_0 = (self._width - 1) / 2.0
+        #v_0 = (self._height - 1) / 2.0
+    
+        ## Construct the intrinsic camera matrix K
+        #K = np.array([[f_x, 0, u_0], 
+        #              [0, f_y, v_0], 
+        #              [0, 0, 1]])
+        #return K
+
 
     @property
     def T_world_cam(self) -> np.ndarray:
@@ -121,7 +134,6 @@ class Camera:
         cam_pos = self._data.cam(self._cam_id).xpos
         cam_rot = self._data.cam(self._cam_id).xmat.reshape(3, 3)
         T_world_cam = make_tf(pos=cam_pos, ori=cam_rot).A
-
         camera_axis_correction = np.array(
             [
                 [1.0, 0.0, 0.0, 0.0],

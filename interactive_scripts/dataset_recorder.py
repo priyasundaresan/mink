@@ -19,6 +19,7 @@ class DatasetRecorder:
             os.makedirs(self.data_folder)
 
         self.vis_dim = vis_dim
+        self.episode_idx = self.get_next_idx()
 
         self._reset()
 
@@ -107,6 +108,7 @@ class DatasetRecorder:
             out.release()
 
             np.savez_compressed(demo_path, self.episode)
+            self.episode_idx += 1
         else:
             print("Episode discarded")
 

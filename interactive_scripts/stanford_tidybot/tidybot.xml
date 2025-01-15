@@ -114,9 +114,9 @@
       <geom class="base/collision" mesh="body"/>
       <geom class="base/collision" mesh="top_plate"/>
       <geom class="base/collision" mesh="arm_plate"/>
-      <camera name="base1" pos="0.28 0.15 0.37" euler="-0.4 -0.6 -2.75" fovy="52.23384539951277"
+      <camera name="base1" pos="0.28 0.15 0.37" euler="-0.4 -0.6 -2.75" fovy="52"
         resolution="640 480"/>
-      <camera name="base2" pos="0.28 -0.15 0.37" euler="0.4 -0.6 -0.81" fovy="52.23384539951277"
+      <camera name="base2" pos="0.28 -0.15 0.37" euler="0.4 -0.6 -0.81" fovy="52"
         resolution="640 480"/>
       <body name="gen3/base_link" pos="0 0 0.335" quat="1 0 0 0">
         <inertial pos="-0.000648 -0.000166 0.084487" quat="0.999294 0.00139618 -0.0118387 0.035636" mass="1.697"
