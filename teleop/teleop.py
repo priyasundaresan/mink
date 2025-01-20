@@ -1,7 +1,7 @@
 import mujoco
 import mujoco.viewer
 import numpy as np
-from policies import TeleopPolicy
+from teleop.policies import TeleopPolicy
 
 policy = TeleopPolicy()
 policy.reset()  # Wait for user to press "Start episode"
