@@ -337,7 +337,7 @@ def eval_and_save(
         saver.save(policy.state_dict(), 0.0, save_latest=True)
 
         if ema_policy is not None:
-            #ema_eval = ema_policy.stable_model
+            ema_eval = ema_policy.stable_model
             #ema_score = eval_waypoint_policy(
             #    ema_eval, eval_dataset.env_cfg_path, 3, cfg.num_eval_episode, stat, prefix="ema_"
             #)
