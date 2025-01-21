@@ -353,6 +353,5 @@ def load_waypoint(model_path):
     policy.load_state_dict(torch.load(model_path))
     return policy
 
-
 if __name__ == "__main__":
     main()
