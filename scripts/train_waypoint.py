@@ -222,7 +222,7 @@ class MainConfig(common_utils.RunConfig):
     eval_per_epoch: int = 1
     save_per: int = -1
     num_eval_episode: int = 20
-    save_dir: str = "exps/waypoint/tsfm1"
+    save_dir: str = "exps/waypoint"
     use_wb: int = 0
 
 
@@ -333,15 +333,17 @@ def eval_and_save(
         #score = eval_waypoint_policy(
         #    policy, eval_dataset.env_cfg_path, 3, cfg.num_eval_episode, stat
         #)
-        saver.save(policy.state_dict(), score, save_latest=True)
+        #saver.save(policy.state_dict(), score, save_latest=True)
+        saver.save(policy.state_dict(), 0.0, save_latest=True)
 
         if ema_policy is not None:
             ema_eval = ema_policy.stable_model
-            ema_score = eval_waypoint_policy(
-                ema_eval, eval_dataset.env_cfg_path, 3, cfg.num_eval_episode, stat, prefix="ema_"
-            )
-            stat["eval/ema-delta"].append(ema_score - score)
-            saver.save(ema_eval.state_dict(), ema_score, force_save_name="ema")
+            #ema_score = eval_waypoint_policy(
+            #    ema_eval, eval_dataset.env_cfg_path, 3, cfg.num_eval_episode, stat, prefix="ema_"
+            #)
+            #stat["eval/ema-delta"].append(ema_score - score)
+            #saver.save(ema_eval.state_dict(), ema_score, force_save_name="ema")
+            saver.save(ema_eval.state_dict(), 0.0, force_save_name="ema")
 
 def load_waypoint(model_path, device="cuda"):
     """
