@@ -192,7 +192,7 @@ class PointCloudDatasetConfig:
     def __post_init__(self):
         PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
         DATASETS = {
-            "cube": os.path.join(PROJECT_ROOT, "data/devcube"),
+            "cube": os.path.join(PROJECT_ROOT, "data/cube"),
         }
         if self.path in DATASETS:
             self.path = DATASETS[self.path]
@@ -350,7 +350,7 @@ class PointCloudDataset(Dataset):
 
 def main():
     cfg = PointCloudDatasetConfig(
-        path="devrelabel",
+        path="cube",
         is_real=1,
         aug_interpolate=0.2,
         aug_translate=0,
