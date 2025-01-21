@@ -343,12 +343,32 @@ def eval_and_save(
             stat["eval/ema-delta"].append(ema_score - score)
             saver.save(ema_eval.state_dict(), ema_score, force_save_name="ema")
 
+def load_waypoint(model_path, device="cuda"):
+    """
+    Load a WaypointTransformer model with the specified device.
 
-def load_waypoint(model_path):
+    Args:
+        model_path (str): Path to the model's state dictionary.
+        device (str): Device to load the model onto ('cpu' or 'cuda').
+
+    Returns:
+        WaypointTransformer: The loaded policy.
+    """
     train_cfg_path = os.path.join(os.path.dirname(model_path), "cfg.yaml")
-    train_cfg = pyrallis.load(MainConfig, open(train_cfg_path, "r"))  # type: ignore
+    
+    # Load the training configuration
+    with open(train_cfg_path, "r") as cfg_file:
+        train_cfg = pyrallis.load(MainConfig, cfg_file)  # type: ignore
+    
+    # Initialize the model
     policy = WaypointTransformer(train_cfg.waypoint)
-    policy.load_state_dict(torch.load(model_path))
+    
+    # Load the model's state dictionary
+    policy.load_state_dict(torch.load(model_path, map_location=device))
+    
+    # Move the model to the specified device
+    policy.to(device)
+    
     return policy
 
 if __name__ == "__main__":

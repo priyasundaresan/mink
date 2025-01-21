@@ -6,6 +6,7 @@ from torch import nn
 import numpy as np
 import einops
 from scipy.spatial.transform import Rotation as R
+from typing import Tuple
 
 from models.pointnet2_utils import farthest_point_sample
 
@@ -179,10 +180,10 @@ class WaypointTransformer(nn.Module):
         mode_logit = self.mode_output.forward(mode_feat.squeeze(1))
         return click_logits, points_off, pos, rot, gripper_logit, mode_logit
 
-    @torch.no_grad
+    #@torch.no_grad
     def inference(
         self, points: torch.Tensor, colors: torch.Tensor, proprio: torch.Tensor, num_pass: int
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, np.int64]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float, int]:
         """
         args:
             points: [N, 3]
@@ -190,76 +191,79 @@ class WaypointTransformer(nn.Module):
             proprio: [proprio_dim]
         """
         assert not self.training
-        # print(f"{points.size()}")
-        points = points.unsqueeze(0).repeat(num_pass, 1, 1).cuda()
-        colors = colors.unsqueeze(0).repeat(num_pass, 1, 1).cuda()
-        fps_indices = farthest_point_sample(points, self.cfg.npoints)  # [num_pass, num_point]
-        repeat_fps_indices = fps_indices.unsqueeze(2).repeat(1, 1, 3)
-        points = points.gather(1, repeat_fps_indices)
-        colors = colors.gather(1, repeat_fps_indices)
+        with torch.no_grad():
+            # print(f"{points.size()}")
+            points = points.unsqueeze(0).repeat(num_pass, 1, 1).cuda()
+            colors = colors.unsqueeze(0).repeat(num_pass, 1, 1).cuda()
 
-        # points/colors: [num_pass, num_point, 6]
-        points = torch.cat([points, colors], dim=2)
-        proprio = proprio.unsqueeze(0).repeat(num_pass, 1).cuda()
-        click_logits, points_off, pos, rot, gripper_logit, mode_logit = self.forward(
-            points, proprio
-        )
+            fps_indices = farthest_point_sample(points, self.cfg.npoints)  # [num_pass, num_point]
+            repeat_fps_indices = fps_indices.unsqueeze(2).repeat(1, 1, 3)
+            points = points.gather(1, repeat_fps_indices)
+            colors = colors.gather(1, repeat_fps_indices)
 
-        _, sorted_click_indices = click_logits.sort(dim=1, descending=True)
-        # click_indices: [num_pass, topk_eval]
-        click_indices = sorted_click_indices[:, : self.cfg.topk_eval]
-        unsampled_click_indices = fps_indices.gather(1, click_indices).flatten().cpu().numpy()
+            # points/colors: [num_pass, num_point, 6]
+            points = torch.cat([points, colors], dim=2)
+            proprio = proprio.unsqueeze(0).repeat(num_pass, 1).cuda()
+            click_logits, points_off, pos, rot, gripper_logit, mode_logit = self.forward(
+                points, proprio
+            )
 
-        # compute action pos
-        if self.cfg.pred_off:
-            selected_points = points.gather(1, click_indices.unsqueeze(2).repeat(1, 1, 6))
-            selected_xyz = selected_points[:, :, :3]
-            selected_off = points_off.gather(1, click_indices.unsqueeze(2).repeat(1, 1, 3))
+            _, sorted_click_indices = click_logits.sort(dim=1, descending=True)
+            # click_indices: [num_pass, topk_eval]
+            click_indices = sorted_click_indices[:, : self.cfg.topk_eval]
+            unsampled_click_indices = fps_indices.gather(1, click_indices).flatten().cpu().numpy()
 
-            assert selected_xyz.size() == selected_off.size()
-            target_pos = (selected_xyz - selected_off).flatten(0, 1).mean(0).cpu().numpy()
-        else:
-            target_pos = pos.mean(0).cpu().numpy()
+            # compute action pos
+            if self.cfg.pred_off:
+                selected_points = points.gather(1, click_indices.unsqueeze(2).repeat(1, 1, 6))
+                selected_xyz = selected_points[:, :, :3]
+                selected_off = points_off.gather(1, click_indices.unsqueeze(2).repeat(1, 1, 3))
 
-        # average rot
-        if self.cfg.per_point_rot:
-            selected_rot = rot.gather(1, click_indices.unsqueeze(2).repeat(1, 1, 3))
-            rot = selected_rot.flatten(0, 1)
+                assert selected_xyz.size() == selected_off.size()
+                target_pos = (selected_xyz - selected_off).flatten(0, 1).mean(0).cpu().numpy()
+            else:
+                target_pos = pos.mean(0).cpu().numpy()
 
-        assert self.cfg.use_euler
-        rot_quat = R.from_euler("xyz", rot.cpu().numpy()).as_quat()  # type: ignore
-        rot_quat = np.mean(rot_quat, axis=0)
-        rot_quat /= np.linalg.norm(rot_quat)
-        target_rot = R.from_quat(rot_quat).as_euler("xyz")
+            # average rot
+            if self.cfg.per_point_rot:
+                selected_rot = rot.gather(1, click_indices.unsqueeze(2).repeat(1, 1, 3))
+                rot = selected_rot.flatten(0, 1)
 
-        gripper = nn.functional.sigmoid(gripper_logit).mean()
-        gripper = gripper.round().item()
+            assert self.cfg.use_euler
+            rot_quat = R.from_euler("xyz", rot.cpu().numpy()).as_quat()  # type: ignore
+            rot_quat = np.mean(rot_quat, axis=0)
+            rot_quat /= np.linalg.norm(rot_quat)
+            target_rot = R.from_quat(rot_quat).as_euler("xyz")
 
-        mode_probs = nn.functional.softmax(mode_logit, dim=-1)
-        mode_probs = mode_probs.squeeze().detach().cpu().numpy()
-        mode = mode_probs.argmax()
+            gripper = nn.functional.sigmoid(gripper_logit).mean()
+            gripper = gripper.round().item()
 
-        return unsampled_click_indices, target_pos, target_rot, gripper, mode
+            mode_probs = nn.functional.softmax(mode_logit, dim=-1)
+            mode_probs = mode_probs.squeeze().detach().cpu().numpy()
+            mode = mode_probs.argmax()
 
-    @torch.no_grad
+            return unsampled_click_indices, target_pos, target_rot, gripper, mode
+
+    #@torch.no_grad
     def inference_click_probs(
         self, points: torch.Tensor, colors: torch.Tensor, proprio: torch.Tensor
     ) -> torch.Tensor:
         assert not self.training
-        unsampled_click_probs = torch.zeros(points.size(0)).cuda()
+        with torch.no_grad():
+            unsampled_click_probs = torch.zeros(points.size(0)).cuda()
 
-        points = points.unsqueeze(0).repeat(1, 1, 1).cuda()
-        colors = colors.unsqueeze(0).repeat(1, 1, 1).cuda()
-        fps_indices = farthest_point_sample(points, self.cfg.npoints)  # [num_pass, num_point]
-        repeat_fps_indices = fps_indices.unsqueeze(2).repeat(1, 1, 3)
-        points = points.gather(1, repeat_fps_indices)
-        colors = colors.gather(1, repeat_fps_indices)
+            points = points.unsqueeze(0).repeat(1, 1, 1).cuda()
+            colors = colors.unsqueeze(0).repeat(1, 1, 1).cuda()
+            fps_indices = farthest_point_sample(points, self.cfg.npoints)  # [num_pass, num_point]
+            repeat_fps_indices = fps_indices.unsqueeze(2).repeat(1, 1, 3)
+            points = points.gather(1, repeat_fps_indices)
+            colors = colors.gather(1, repeat_fps_indices)
 
-        # points/colors: [num_pass, num_point, 6]
-        points = torch.cat([points, colors], dim=2)
-        proprio = proprio.unsqueeze(0).repeat(1, 1).cuda()
-        click_logits, *_ = self.forward(points, proprio)
-        click_probs = nn.functional.softmax(click_logits, -1).squeeze(0)
+            # points/colors: [num_pass, num_point, 6]
+            points = torch.cat([points, colors], dim=2)
+            proprio = proprio.unsqueeze(0).repeat(1, 1).cuda()
+            click_logits, *_ = self.forward(points, proprio)
+            click_probs = nn.functional.softmax(click_logits, -1).squeeze(0)
 
-        unsampled_click_probs.scatter_(0, fps_indices.squeeze(0), click_probs)
-        return unsampled_click_probs.cpu()
+            unsampled_click_probs.scatter_(0, fps_indices.squeeze(0), click_probs)
+            return unsampled_click_probs.cpu()
