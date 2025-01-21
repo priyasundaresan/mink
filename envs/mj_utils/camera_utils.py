@@ -53,7 +53,7 @@ def pcl_from_obs(obs):
         points = depth_to_point_cloud(depth_image, intrinsics, extrinsics)
         colors = rgb_image.reshape(points.shape) / 255  # Normalize color values
 
-        z_mask = points[..., 2] > 0.0
+        z_mask = points[..., 2] > 0.02
         points = points[z_mask]
         colors = colors[z_mask]
 

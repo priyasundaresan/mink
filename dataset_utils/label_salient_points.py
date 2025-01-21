@@ -84,16 +84,16 @@ def label_salient_points(episode_fn):
             clicked_point = viewer.get_clicked_point()
             if clicked_point is not None:
                 print(f"Clicked Point for step {t}: {clicked_point}, with action %s"%str(step["action"][:3]))
-                step["obs"]["click"] = np.array(clicked_point)  # Update obs with the clicked point
+                step["click"] = np.array(clicked_point)  # Update obs with the clicked point
     
     print('Done, saving %s'%episode_fn)
     np.savez(episode_fn, demo)
     print('Saved %s'%episode_fn)
     print('****')
-    sys.exit(app.exec_())
+    #sys.exit(app.exec_())
 
 if __name__ == "__main__":
     # Example usage
-    for fn in os.listdir('devrelabel'):
+    for fn in sorted(os.listdir('devrelabel')):
         if 'npz' in fn:
             label_salient_points(os.path.join('devrelabel', fn))
