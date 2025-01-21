@@ -329,11 +329,10 @@ def eval_and_save(
                 force_save_name += "_ema"
             saver.save(ema_weights, -pos_err, save_latest=True, force_save_name=force_save_name)
     else:
-        from scripts.eval_sim_waypoint import eval_waypoint_policy
-
-        score = eval_waypoint_policy(
-            policy, eval_dataset.env_cfg_path, 3, cfg.num_eval_episode, stat
-        )
+        #from scripts.eval_sim_waypoint import eval_waypoint_policy
+        #score = eval_waypoint_policy(
+        #    policy, eval_dataset.env_cfg_path, 3, cfg.num_eval_episode, stat
+        #)
         saver.save(policy.state_dict(), score, save_latest=True)
 
         if ema_policy is not None:
@@ -348,20 +347,9 @@ def eval_and_save(
 def load_waypoint(model_path):
     train_cfg_path = os.path.join(os.path.dirname(model_path), "cfg.yaml")
     train_cfg = pyrallis.load(MainConfig, open(train_cfg_path, "r"))  # type: ignore
-    env_cfg = os.path.join(train_cfg.dataset.path, "env_cfg.yaml")
-    if train_cfg.dataset.is_real:
-        from envs.franka_env import FrankaEnvConfig
-
-        env_cfg = pyrallis.load(FrankaEnvConfig, open(env_cfg, "r"))  # type: ignore
-    else:
-        from envs.robomimic_env import RobomimicEnvConfig
-
-        env_cfg = pyrallis.load(RobomimicEnvConfig, open(env_cfg, "r"))  # type: ignore
-
     policy = WaypointTransformer(train_cfg.waypoint)
     policy.load_state_dict(torch.load(model_path))
-
-    return policy, env_cfg
+    return policy
 
 
 if __name__ == "__main__":
