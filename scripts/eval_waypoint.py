@@ -62,15 +62,14 @@ def eval_waypoint(
                         )
 
                         action = {'base_pose': np.zeros(3), \
-                                  'arm_pos': pos_cmd, \
+                                  'arm_pos': pos_cmd * [1, -1, 1], \
                                   'arm_quat': R.from_euler('xyz', euler_cmd).as_quat()}
                     gripper_action = float(gripper_cmd)
 
                     env.step(action, gripper_action)
-                    eef_pos = obs['eef_pos']*[1,-1,1]
+                    eef_pos = obs['eef_pos']
                     pos_err = np.linalg.norm(eef_pos - pos_cmd)
-                    reached = pos_err < 8e-3
-                    print(pos_err)
+                    reached = pos_err < 1e-2
                     
                     viewer.sync()
                     #env.rate_limiter.sleep()

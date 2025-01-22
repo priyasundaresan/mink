@@ -236,6 +236,7 @@ class MujocoEnv:
                 obs = {
                     'base_pose': np.zeros(3),
                     'arm_pos': self.data.mocap_pos[0],
+                    'arm_pos': self.data.mocap_pos[0],
                     'arm_quat': self.data.mocap_quat[0][[3, 1, 0, 2]] * [1, -1, 1, 1],
                     'gripper_pos': np.zeros(1),
                 }
@@ -249,11 +250,12 @@ class MujocoEnv:
                     action['arm_euler'] = R.from_quat(action['arm_quat']).as_euler('xyz')
 
                     # Absolute action to record
-                    record_action = np.concatenate([action['arm_pos'], \
+                    record_action = np.concatenate([action['arm_pos']*[1, -1, 1], \
 					              action['arm_euler'], \
 						      action['gripper_pos']])
 
-                    delta_pos = action['arm_pos'] - record_obs['eef_pos']
+                    delta_pos = record_action[:3] - record_obs['eef_pos']
+                    print(record_action[:3], record_obs['eef_pos'])
                     delta_euler = quaternion_to_euler_diff(action['arm_quat'], \
 		        				   record_obs['eef_quat'])
 
@@ -324,7 +326,7 @@ class MujocoEnv:
                     ## Absolute Replay
                     action = {
                         'base_pose': np.zeros(3),
-                        'arm_pos': recorded_action[:3],
+                        'arm_pos': recorded_action[:3] * [1,-1,1],
                         'arm_quat': R.from_euler('xyz', recorded_action[3:6]).as_quat(),
                         'gripper_pos': np.array(recorded_action[-1]),
                         'base_image': np.zeros((640, 360, 3)),
@@ -399,7 +401,7 @@ class MujocoEnv:
 
                     action = {
                         'base_pose': np.zeros(3),
-                        'arm_pos': recorded_action[:3],
+                        'arm_pos': recorded_action[:3] * [1,-1,1],
                         'arm_quat': R.from_euler('xyz', recorded_action[3:6]).as_quat(),
                         'gripper_pos': np.array(recorded_action[-1]),
                         'base_image': np.zeros((640, 360, 3)),
