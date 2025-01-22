@@ -1,4 +1,5 @@
 cameras:
+  - viewer
   - base1
   - base2
   - wrist
