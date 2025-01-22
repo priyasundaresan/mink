@@ -5,6 +5,7 @@ import pandas as pd
 import spatialmath as sm
 import spatialmath.base as smb
 from scipy.spatial.transform import Rotation as R
+import matplotlib.pyplot as plt
 
 def depth_to_point_cloud(depth_image, K, T) -> np.ndarray:
     # Get image dimensions
@@ -28,6 +29,7 @@ def depth_to_point_cloud(depth_image, K, T) -> np.ndarray:
 
     # Calculate 3D points in camera coordinates
     points_camera = np.dot(K_inv, homogeneous_coords) * depth_flat
+    print(points_camera.shape)
 
     # Homogeneous coordinates to 3D points
     points_camera_homog = np.vstack((points_camera, np.ones_like(x_flat)))
@@ -59,6 +61,7 @@ def pcl_from_obs(obs):
 
         merged_points.append(points)
         merged_colors.append(colors)
+        break
 
     merged_points = np.vstack(merged_points)
     merged_colors = np.vstack(merged_colors)

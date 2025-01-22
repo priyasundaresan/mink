@@ -111,6 +111,11 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
                     continue
 
                 action = step["action"]
+
+                # Handle euler symmetry
+                if action[3] < 0:
+                    action[3] *= -1
+
                 curr_waypoint = {
                     "pos": action[:3],
                     "euler": action[3:6],
@@ -271,6 +276,7 @@ class PointCloudDataset(Dataset):
             action_rot = torch.from_numpy(data["action_euler"]).float()
         else:
             action_rot = torch.from_numpy(data["action_quat"]).float()
+
         action_gripper = torch.tensor(data["action_gripper"], dtype=torch.float32)
         proprio = torch.from_numpy(data["proprio"]).float()
         target_mode = torch.tensor(data["target_mode"]).long()
@@ -307,8 +313,8 @@ class PointCloudDataset(Dataset):
             points, colors = pcd.split([3, 3], dim=1)
 
             clicks = clicks.unsqueeze(1)
-            red = torch.tensor([0, 0, 1], dtype=torch.float32)
-            colors = red * clicks + colors * (1 - clicks)
+            red = torch.tensor([1, 0, 0], dtype=torch.float32)
+            #colors = red * clicks + colors * (1 - clicks)
 
             point_cloud = o3d.geometry.PointCloud()
             point_cloud.points = o3d.utility.Vector3dVector(points.numpy())
@@ -335,7 +341,6 @@ class PointCloudDataset(Dataset):
                 )
                 gripper_vis.paint_uniform_color([0.0, 0.0, 0.8])
                 rotation_matrix = R.from_euler("xyz", proprio[3:6]).as_matrix()
-                default_rot = R.from_euler("x", -np.pi / 2).as_matrix()
                 rotation_matrix = rotation_matrix @ default_rot
                 transform = np.eye(4)
                 transform[:3, :3] = rotation_matrix
@@ -352,11 +357,11 @@ def main():
     cfg = PointCloudDatasetConfig(
         path="cube",
         is_real=1,
-        aug_interpolate=0.2,
+        aug_interpolate=0,
         aug_translate=0,
         aug_rotate=0,
         use_dist=1,
-        fps=1,
+        fps=0,
     )
     dataset = PointCloudDataset(cfg, use_euler=True, npoints=1024, split="all")
     d = dataset[0]
@@ -366,7 +371,7 @@ def main():
     print("#positive:", user_clicked_labels[indices].size())
     print("click labels:", user_clicked_labels[indices])
     print("click labels max:", user_clicked_labels[indices].max())
-    #dataset.save_vis("vis_dev", render_gripper=False)
+    dataset.save_vis("vis_dev", render_gripper=False)
 
 if __name__ == "__main__":
     main()
