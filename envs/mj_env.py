@@ -9,13 +9,16 @@ from teleop.policies import TeleopPolicy
 from scipy.spatial.transform import Rotation as R
 from interactive_scripts.dataset_recorder import DatasetRecorder, ActMode
 from envs.mj_utils.camera import Camera
-from envs.robot_utils import Proprio, LinearWaypointReach, quaternion_to_euler_diff
+from envs.robot_utils import Proprio, LinearWaypointReach, LinearWaypointReachConfig, quaternion_to_euler_diff
 from dataclasses import dataclass, field
 from common_utils import Stopwatch
 import pyrallis
 import argparse
 from dm_control.viewer import user_input
 import os
+from common_utils.eval_utils import (
+    check_for_interrupt,
+)
 
 def add_text(pos, viewer, input):
     # create an invisibale geom and add label on it
@@ -110,6 +113,73 @@ class MujocoEnv:
         cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, "interactive_cube")
         self.data.xpos[cube_body_id] += randomized_position
         self.data.qpos[self.model.joint("cube_freejoint").id : self.model.joint("cube_freejoint").id + 3] += randomized_position
+
+    def move_to(
+        self,
+        target_pos: np.ndarray,
+        target_euler: np.ndarray,
+        gripper_closed: float,
+        viewer,
+        recorder,
+        ):
+        wpr_cfg = LinearWaypointReachConfig()
+        wpr_cfg.pos_threshold = 0.01
+        wpr_cfg.pos_step_size = 0.08
+        wpr_cfg.rot_threshold = 0.05
+        wpr_cfg.rot_step_size = 0.3
+
+        waypoint_reach = LinearWaypointReach(
+            target_pos,
+            target_euler,
+            wpr_cfg,
+        )
+        terminate = False
+
+        proprio = self.observe_proprio()
+        initially_open = proprio.gripper_width > 0.95
+
+        for i in range(50):
+            obs = self.observe()
+            if recorder is not None:
+                recorder.add_numpy(obs, ["viewer_image"])
+
+            pos_cmd, euler_cmd, reached = waypoint_reach.step(
+                obs['eef_pos'], obs['eef_euler']
+            )
+
+            action = {'base_pose': np.zeros(3), \
+                      'arm_pos': pos_cmd * [1, -1, 1], \
+                      'arm_quat': R.from_euler('xyz', euler_cmd).as_quat()}
+
+            gripper_action = 0 if initially_open else 1
+
+            self.step(action, gripper_action)
+
+            if reached:
+                break
+
+            if check_for_interrupt():
+                print('Interrupt')
+                terminate = True
+                break
+
+            if viewer is not None:
+                viewer.sync()
+            self.rate_limiter.sleep()
+
+        # Apply gripper action afterwards
+        for i in range(40):
+            obs = self.observe()
+            if recorder is not None:
+                recorder.add_numpy(obs, ["viewer_image"])
+
+            self.step(action, gripper_closed)
+            if viewer is not None:
+                viewer.sync()
+            self.rate_limiter.sleep()
+
+        return reached, terminate
+
 
     def step(self, action, gripper_closed, is_delta=False):
 
