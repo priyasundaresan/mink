@@ -76,7 +76,7 @@ def label_salient_points(episode_fn):
 
     for t, step in enumerate(list(demo)):
         if step['mode'] == ActMode.Waypoint:
-            merged_points, merged_colors = pcl_from_obs(step["obs"])
+            merged_points, merged_colors = pcl_from_obs(step["obs"], crop=True)
 
             viewer = PointCloudViewer(merged_points=merged_points, merged_colors=merged_colors, index=t)
             viewer.display_point_cloud()
