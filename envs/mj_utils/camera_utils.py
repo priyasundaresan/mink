@@ -29,7 +29,6 @@ def depth_to_point_cloud(depth_image, K, T) -> np.ndarray:
 
     # Calculate 3D points in camera coordinates
     points_camera = np.dot(K_inv, homogeneous_coords) * depth_flat
-    print(points_camera.shape)
 
     # Homogeneous coordinates to 3D points
     points_camera_homog = np.vstack((points_camera, np.ones_like(x_flat)))

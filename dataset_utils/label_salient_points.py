@@ -94,6 +94,6 @@ def label_salient_points(episode_fn):
 
 if __name__ == "__main__":
     # Example usage
-    for fn in sorted(os.listdir('devrelabel')):
+    for fn in sorted(os.listdir('dev1_relabeled')):
         if 'npz' in fn:
-            label_salient_points(os.path.join('devrelabel', fn))
+            label_salient_points(os.path.join('dev1_relabeled', fn))
