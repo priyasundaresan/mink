@@ -110,6 +110,56 @@ def _sgd_style_step(step_size, max_norm, delta):
     delta = delta / delta_norm * min(delta_norm, max_norm)
     return delta
 
+@dataclass
+class LinearWaypointReachConfig:
+    pos_threshold: float = 0.01
+    pos_step_size: float = 0.1
+    rot_threshold: float = 0.02
+    rot_step_size: float = 0.1
+
+class LinearWaypointReach:
+    def __init__(
+        self,
+        target_pos: np.ndarray,
+        target_euler: np.ndarray,
+        cfg: LinearWaypointReachConfig,
+    ):
+        self.target_pos = target_pos
+        self.target_rot = Rotation.from_euler("xyz", target_euler)
+        self.cfg = cfg
+
+    def step(self, curr_pos: np.ndarray, curr_euler: np.ndarray):
+        # Compute position delta
+        delta_pos = self.target_pos - curr_pos
+        pos_reached = np.linalg.norm(delta_pos) < self.cfg.pos_threshold
+
+        if pos_reached:
+            abs_pos = self.target_pos
+        else:
+            # Take a linear step toward the target
+            step_size = min(self.cfg.pos_step_size, np.linalg.norm(delta_pos))
+            delta_pos = (delta_pos / np.linalg.norm(delta_pos)) * step_size
+            abs_pos = curr_pos + delta_pos
+
+        # Compute rotation delta using Slerp
+        curr_rot = Rotation.from_euler("xyz", curr_euler)
+        key_times = [0, 1]  # Define interpolation times
+        key_rots = Rotation.concatenate([curr_rot, self.target_rot])
+        slerp = Slerp(key_times, key_rots)
+
+        # Interpolate to the next step (e.g., 0.5 for halfway)
+        interpolated_rot = slerp(0.5)  # Adjust step size as needed
+        abs_rot = interpolated_rot.as_euler("xyz")
+
+        # Check if rotation has reached the target
+        rot_reached = np.linalg.norm((self.target_rot * curr_rot.inv()).as_euler("xyz")) < self.cfg.rot_threshold
+
+        # Check if both position and rotation have reached the target
+        reached = pos_reached and rot_reached
+
+        return abs_pos, abs_rot, reached
+
+
 
 @dataclass
 class WaypointReachConfig:
@@ -193,57 +243,4 @@ class WaypointReach:
         return delta_pos, delta_euler, reached
 
 
-class LinearWaypointReach:
-    def __init__(
-        self,
-        initial_pos: np.ndarray,
-        initial_euler: np.ndarray,
-        target_pos: np.ndarray,
-        target_euler: np.ndarray,
-        num_steps: int,
-    ):
-        self.initial_pos = initial_pos
-        self.initial_euler = initial_euler
-        self.target_pos = target_pos
-        self.target_euler = target_euler
-        self.num_steps = num_steps
-
-        # Adjust target Euler angles for shortest path interpolation
-        self.target_euler = self._adjust_euler_shortest_path(self.initial_euler, self.target_euler)
-
-        # Precompute position and rotation step sizes
-        self.pos_step = (self.target_pos - self.initial_pos) / self.num_steps
-        self.euler_step = (self.target_euler - self.initial_euler) / self.num_steps
-
-    def _adjust_euler_shortest_path(self, initial_euler: np.ndarray, target_euler: np.ndarray):
-        """Adjust target Euler angles to ensure shortest path interpolation."""
-        adjusted_target = target_euler.copy()
-        for i in range(3):  # Iterate over each axis
-            diff = target_euler[i] - initial_euler[i]
-            if diff > np.pi:
-                adjusted_target[i] -= 2 * np.pi
-            elif diff < -np.pi:
-                adjusted_target[i] += 2 * np.pi
-        return adjusted_target
-
-    def step(self, current_step: int):
-        """Compute the deltas for the current step based on linear interpolation."""
-        if current_step >= self.num_steps:
-            return np.zeros(3), np.zeros(3), True
-
-        # Linearly interpolate position
-        next_pos = self.initial_pos + (current_step + 1) * self.pos_step
-        delta_pos = self.pos_step
-
-        # Linearly interpolate Euler angles
-        next_euler = self.initial_euler + (current_step + 1) * self.euler_step
-        current_euler = self.initial_euler + current_step * self.euler_step
-        delta_euler = next_euler - current_euler
-
-        # Normalize Euler angles to handle wraparound
-        delta_euler = np.mod(delta_euler + np.pi, 2 * np.pi) - np.pi
-
-        # Check if target is reached
-        reached = current_step + 1 == self.num_steps
-        return delta_pos, delta_euler, reached
 
