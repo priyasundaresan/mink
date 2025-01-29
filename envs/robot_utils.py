@@ -242,5 +242,11 @@ class WaypointReach:
         reached = rot_reached and pos_reached
         return delta_pos, delta_euler, reached
 
+@dataclass
+class LinearWaypointReachConfig:
+    pos_threshold: float = 0.01
+    pos_step_size: float = 0.08
+    rot_threshold: float = 0.05
+    rot_step_size: float = 0.3
 
 

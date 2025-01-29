@@ -325,9 +325,10 @@ class MujocoEnv:
 						      action['gripper_pos']])
 
                     delta_pos = record_action[:3] - record_obs['eef_pos']
-                    print(record_action[:3], record_obs['eef_pos'])
                     delta_euler = quaternion_to_euler_diff(action['arm_quat'], \
 		        				   record_obs['eef_quat'])
+
+                    print(delta_pos, delta_euler)
 
                     # Delta action to record
                     record_delta_action = np.concatenate([delta_pos, \
@@ -511,10 +512,10 @@ class MujocoEnv:
         for t, step in enumerate(list(demo)):
             print(step['mode'], step['waypoint_idx'], step['action'])
 
-        if not os.path.exists('devrelabel'):
-            os.mkdir('devrelabel')
+        if not os.path.exists('dev1_relabeled'):
+            os.mkdir('dev1_relabeled')
 
-        np.savez(episode_fn.replace('dev1', 'devrelabel'), demo)
+        np.savez(episode_fn.replace('dev1', 'dev1_relabeled'), demo)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

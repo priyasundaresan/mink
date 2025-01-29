@@ -11,7 +11,7 @@ def label_salient_points(episode_fn):
     # Loop through each timestep
     for t, step in enumerate(demo):
         obs = step["obs"]
-        merged_points, merged_colors = pcl_from_obs(obs)
+        merged_points, merged_colors = pcl_from_obs(obs, crop=True)
 
         # Check for valid point cloud data
         if merged_points is None or merged_colors is None or len(merged_points) == 0:
