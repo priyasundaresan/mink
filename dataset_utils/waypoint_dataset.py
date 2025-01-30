@@ -133,7 +133,7 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
                 assert waypoint_len > 0
                 #print(f"waypoint @step: {curr_waypoint_step}, len: {waypoint_len}")
 
-            elif mode == ActMode.Dense:
+            elif mode == ActMode.Interpolate:
                 assert waypoint_len > 0
                 step["click"] = curr_waypoint["click"]
                 progress = (t - curr_waypoint_step) / waypoint_len

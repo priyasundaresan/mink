@@ -3,7 +3,7 @@ cameras:
   - base1
   - base2
   - wrist
-xml_file: interactive_scripts/stanford_tidybot/scene.xml
+xml_file: interactive_scripts/stanford_tidybot/open.xml
 data_folder: dev1
 image_size: 224
 crop_floor: 1

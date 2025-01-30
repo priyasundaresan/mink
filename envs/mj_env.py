@@ -107,12 +107,18 @@ class MujocoEnv:
             self.model, self.data, "pinch_site_target", "pinch_site", "site"
         )
         
-        # Randomize the position of the cube
-        randomized_position = np.random.uniform(low=(-0.07,-0.2,0), high=(0.07,0.2,0), size=3)
-        randomized_position[2] = 0.05
-        cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, "interactive_cube")
-        self.data.xpos[cube_body_id] += randomized_position
-        self.data.qpos[self.model.joint("cube_freejoint").id : self.model.joint("cube_freejoint").id + 3] += randomized_position
+        ## Task specific randomizations
+        if 'cube' in self.cfg.xml_file:
+            randomized_position = np.random.uniform(low=(-0.07,-0.2,0), high=(0.07,0.2,0), size=3)
+            randomized_position[2] = 0.05
+            interactive_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, "interactive_obj")
+            self.data.xpos[interactive_body_id] += randomized_position
+            self.data.qpos[self.model.joint("interactive_obj_freejoint").id : self.model.joint("interactive_obj_freejoint").id + 3] += randomized_position
+
+        elif 'open' in self.cfg.xml_file:
+            proprio = self.observe_proprio()
+            randomized_position = np.random.uniform(low=(-0.2,-0.3,-0.3), high=(0.0,0.3,0), size=3)
+            self.move_to(proprio.eef_pos + randomized_position, proprio.eef_euler, 0.0, None, None)
 
     def move_to(
         self,
@@ -270,6 +276,10 @@ class MujocoEnv:
         """Handle keyboard input."""
         if key == user_input.KEY_SPACE:
             return True
+        elif key == user_input.KEY_LEFT:
+            return 'd'
+        elif key == user_input.KEY_RIGHT:
+            return 'w'
         return False
 
     def collect_episode(self):
@@ -427,7 +437,7 @@ class MujocoEnv:
                 # Increment the step counter
                 step_counter += 1
 
-    def relabel_episode(self, episode_fn):
+    def waypoint_relabel_episode(self, episode_fn):
         demo = np.load(episode_fn, allow_pickle=True)['arr_0']
         key_queue = queue.Queue()
 
@@ -466,7 +476,8 @@ class MujocoEnv:
 
                     # Collect and process key inputs
                     while not key_queue.empty():
-                        if self.keyboard_callback(key_queue.get()):
+                        key = self.keyboard_callback(key_queue.get())
+                        if key:
                             waypoint_idxs.append(episode_counter)
                             add_text(recorded_action[:3], viewer, str(len(waypoint_idxs)-1))
 
@@ -506,6 +517,8 @@ class MujocoEnv:
 
                 curr_waypoint_step = waypoint_idxs.pop(0)
                 waypoint_idx += 1
+            else:
+                step['mode'] = ActMode.Interpolate
 
             step['waypoint_idx'] = waypoint_idx
 
@@ -516,6 +529,99 @@ class MujocoEnv:
             os.mkdir('dev1_relabeled')
 
         np.savez(episode_fn.replace('dev1', 'dev1_relabeled'), demo)
+
+    def hybrid_relabel_episode(self, episode_fn):
+        demo = np.load(episode_fn, allow_pickle=True)['arr_0']
+        key_queue = queue.Queue()
+
+        # Reset and seed based on episode idx
+        np.random.seed(int(episode_fn.split('demo')[1].split('.npz')[0]))
+        self.reset()
+
+        traj = []
+        for t, step in enumerate(list(demo)):
+            action = step["action"]
+            traj.append(action)
+
+        episode_counter = 0
+        mode_switch_idxs = []
+
+        image_capture_interval = int(self.frequency / 10)  # Capture images every 10Hz
+        step_counter = 0  # Counter to track simulation steps
+        action = None
+        gripper_state = 0
+        
+        with mj.viewer.launch_passive(
+            model=self.model,
+            data=self.data,
+            show_left_ui=False,
+            show_right_ui=False,
+            key_callback=lambda key: key_queue.put(key)
+        ) as viewer:
+    
+            mj.mjv_defaultFreeCamera(self.model, viewer.cam)
+    
+            while viewer.is_running() and len(traj):
+
+                # Capture images at 10Hz
+                if step_counter % image_capture_interval == 0:
+                    recorded_action = traj.pop(0)
+
+                    # Collect and process key inputs
+                    while not key_queue.empty():
+                        key = self.keyboard_callback(key_queue.get())
+                        if key in ['d', 'w']:
+                            mode_switch_idxs.append([episode_counter, key])
+                            add_text(recorded_action[:3], viewer, key)
+
+                    action = {
+                        'base_pose': np.zeros(3),
+                        'arm_pos': recorded_action[:3] * [1,-1,1],
+                        'arm_quat': R.from_euler('xyz', recorded_action[3:6]).as_quat(),
+                        'gripper_pos': np.array(recorded_action[-1]),
+                        'base_image': np.zeros((640, 360, 3)),
+                        'wrist_image': np.zeros((640, 480, 3)),
+                    }
+
+                    episode_counter += 1
+                    
+                gripper_state = gripper_state if not action else action['gripper_pos'] 
+                self.step(action, gripper_state)
+    
+                # Sync the viewer and sleep to maintain frequency
+                viewer.sync()
+                self.rate_limiter.sleep()
+    
+                # Increment the step counter
+                step_counter += 1
+
+        #waypoint_idx = -1
+        #curr_waypoint_step = 0
+
+        #for t, step in enumerate(list(demo)):
+
+        #    if t == curr_waypoint_step and len(waypoint_idxs):
+
+        #        waypoint_action = list(demo)[waypoint_idxs[0]]['action'] 
+
+        #        step['action'] = waypoint_action
+        #        step['mode'] = ActMode.Waypoint
+        #        step['waypoint_idx'] = waypoint_idx
+
+        #        curr_waypoint_step = waypoint_idxs.pop(0)
+        #        waypoint_idx += 1
+        #    else:
+        #        step['mode'] = ActMode.Interpolate
+
+        #    step['waypoint_idx'] = waypoint_idx
+
+        #for t, step in enumerate(list(demo)):
+        #    print(step['mode'], step['waypoint_idx'], step['action'])
+
+        #if not os.path.exists('dev1_relabeled'):
+        #    os.mkdir('dev1_relabeled')
+
+        #np.savez(episode_fn.replace('dev1', 'dev1_relabeled'), demo)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -529,4 +635,5 @@ if __name__ == "__main__":
 
     for fn in os.listdir("dev1"):
         if 'npz' in fn:
-            env.relabel_episode("dev1/%s"%fn)
+            #env.waypoint_relabel_episode("dev1/%s"%fn)
+            env.hybrid_relabel_episode("dev1/%s"%fn)
