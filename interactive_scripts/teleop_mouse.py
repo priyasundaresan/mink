@@ -10,7 +10,7 @@ from loop_rate_limiters import RateLimiter
 import mink
 
 _HERE = Path(__file__).parent
-_XML = _HERE / "stanford_tidybot" / "open.xml"
+_XML = _HERE / "stanford_tidybot" / "cube.xml"
 
 
 @dataclass

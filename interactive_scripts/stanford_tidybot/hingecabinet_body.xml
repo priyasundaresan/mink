@@ -17,7 +17,7 @@
         <geom material="M_hinge_blue" pos="-0.2 0.28 0" size="0.16 0.02 0.16" type="box"/>
         <geom material="M_hinge_blue" pos="0.2 0.28 0" size="0.16 0.02 0.16" type="box"/>
 
-        <geom class="hinge_collision" size="0.04 0.3 0.2" type="box" mass=".3"/>
+        <geom class="hinge_collision" size="0.04 0.3 0.2" type="box" mass=".05"/>
         <geom class="hinge_collision" pos="0.38 0 0" size="0.02 0.3 0.2" type="box" mass=".2"/>
         <geom class="hinge_collision" pos="-0.38 0 0" size="0.02 0.3 0.2" type="box" mass=".2"/>
         <geom class="hinge_collision" pos="-0.2 0 0.18" size="0.16 0.3 0.02" type="box" mass=".2"/>
