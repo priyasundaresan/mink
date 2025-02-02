@@ -126,7 +126,7 @@ if __name__ == '__main__':
             flask_thread.start()
     
             # Wait for user interactions
-            input("Press Enter when done annotating...")
+            input("Press Enter in terminal when done annotating...")
         
             # Get annotations after interactions
             annotations_result = get_annotations()
