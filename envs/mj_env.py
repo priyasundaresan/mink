@@ -20,7 +20,7 @@ from common_utils.eval_utils import (
     check_for_interrupt,
 )
 
-def add_text(pos, viewer, input):
+def add_text(pos, viewer, input, color=(1,0,0)):
     # create an invisibale geom and add label on it
     geom = viewer.user_scn.geoms[viewer.user_scn.ngeom]
     mujoco.mjv_initGeom(
@@ -29,7 +29,7 @@ def add_text(pos, viewer, input):
         size=np.array([0.55, 0.55, 0.55]),  # label_size
         pos=pos+np.array([0.0, 0.0, 0.1]),  # lebel position, here is 1 meter above the root joint
         mat=np.eye(3).flatten(),  # label orientation, here is no rotation
-        rgba=np.array([1, 0, 0, 0])  # invisible
+        rgba=np.array([color[0], color[1], color[2], 1])  # invisible
     )
     geom.label = input  # receive string input only
     viewer.user_scn.ngeom += 1
@@ -276,10 +276,6 @@ class MujocoEnv:
         """Handle keyboard input."""
         if key == user_input.KEY_SPACE:
             return True
-        elif key == user_input.KEY_LEFT:
-            return 'd'
-        elif key == user_input.KEY_RIGHT:
-            return 'w'
         return False
 
     def collect_episode(self):
@@ -529,71 +525,6 @@ class MujocoEnv:
             os.mkdir('dev1_relabeled')
 
         np.savez(episode_fn.replace('dev1', 'dev1_relabeled'), demo)
-
-    def hybrid_relabel_episode(self, episode_fn):
-        demo = np.load(episode_fn, allow_pickle=True)['arr_0']
-        key_queue = queue.Queue()
-
-        # Reset and seed based on episode idx
-        np.random.seed(int(episode_fn.split('demo')[1].split('.npz')[0]))
-        self.reset()
-
-        traj = []
-        for t, step in enumerate(list(demo)):
-            action = step["action"]
-            traj.append(action)
-
-        episode_counter = 0
-        mode_switch_idxs = []
-
-        image_capture_interval = int(self.frequency / 10)  # Capture images every 10Hz
-        step_counter = 0  # Counter to track simulation steps
-        action = None
-        gripper_state = 0
-        
-        with mj.viewer.launch_passive(
-            model=self.model,
-            data=self.data,
-            show_left_ui=False,
-            show_right_ui=False,
-            key_callback=lambda key: key_queue.put(key)
-        ) as viewer:
-    
-            mj.mjv_defaultFreeCamera(self.model, viewer.cam)
-    
-            while viewer.is_running() and len(traj):
-
-                # Capture images at 10Hz
-                if step_counter % image_capture_interval == 0:
-                    recorded_action = traj.pop(0)
-
-                    # Collect and process key inputs
-                    while not key_queue.empty():
-                        key = self.keyboard_callback(key_queue.get())
-                        if key in ['d', 'w']:
-                            mode_switch_idxs.append([episode_counter, key])
-                            add_text(recorded_action[:3], viewer, key)
-
-                    action = {
-                        'base_pose': np.zeros(3),
-                        'arm_pos': recorded_action[:3] * [1,-1,1],
-                        'arm_quat': R.from_euler('xyz', recorded_action[3:6]).as_quat(),
-                        'gripper_pos': np.array(recorded_action[-1]),
-                        'base_image': np.zeros((640, 360, 3)),
-                        'wrist_image': np.zeros((640, 480, 3)),
-                    }
-
-                    episode_counter += 1
-                    
-                gripper_state = gripper_state if not action else action['gripper_pos'] 
-                self.step(action, gripper_state)
-    
-                # Sync the viewer and sleep to maintain frequency
-                viewer.sync()
-                self.rate_limiter.sleep()
-    
-                # Increment the step counter
-                step_counter += 1
 
         #waypoint_idx = -1
         #curr_waypoint_step = 0

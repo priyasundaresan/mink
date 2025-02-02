@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Interactive Video Annotator</title>
+    <h3 id="demo-name">Loading...</h3>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -139,6 +140,18 @@
         let denseSegments = [];
         let dragStart = null;
 
+        function updateDemoName() {
+            fetch('/get_demo_name')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById("demo-name").innerText = data.demo_name;
+                })
+                .catch(error => console.error("Error fetching demo name:", error));
+        }
+        
+        // Call the function when the page loads
+        document.addEventListener("DOMContentLoaded", updateDemoName);
+
         function updateFrame() {
             fetch(`/frames/${currentFrame}`)
                 .then(response => response.json())
@@ -185,6 +198,15 @@
             waypoints.sort((a, b) => a - b);
             updateAnnotationBar();
             saveAnnotation({ type: "waypoint", frame });
+        }
+
+        function saveAnnotation(annotation) {
+            fetch('/save_annotation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(annotation)
+            }).then(response => response.json())
+              .then(data => console.log("Annotation Saved:", data));
         }
 
         function deleteLastWaypoint() {
