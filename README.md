@@ -51,7 +51,7 @@ Same instructions as above for connecting your iPhone and teleoperating.
 To just test out the whole body controller, you can use the following script to control the robot using only mouse click & drag actions:
 ```shell
 source set_env.sh
-mjpython interactive_scripts/teleop_phone.py
+mjpython interactive_scripts/teleop_mouse.py
 ```
 You will see a little red interaction cube at the end effector appear. You can `Double Click` to select it, then use `Ctrl + Right Click and Drag` to move it positionally, and `Ctrl + Left Click and Drag` to control orientation.
 
