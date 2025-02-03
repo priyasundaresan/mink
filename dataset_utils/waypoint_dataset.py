@@ -131,7 +131,6 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
                         break
                     waypoint_len += 1
                 assert waypoint_len > 0
-                print(f"waypoint @step: {curr_waypoint_step}, len: {waypoint_len}")
 
             elif mode == ActMode.Interpolate:
                 assert waypoint_len > 0
@@ -156,6 +155,8 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
             click_idxs = dist_to_click <= radius
             user_clicks = np.zeros((len(points),)).astype(points.dtype)
             user_clicks[click_idxs] = 1.0
+            if user_clicks.sum() == 0.0:
+                continue
             assert user_clicks.sum() != 0
 
             processed_data = {
@@ -358,13 +359,13 @@ class PointCloudDataset(Dataset):
 
 def main():
     cfg = PointCloudDatasetConfig(
-        path="dev1_relabeled",
+        path="data/cabinet",
         is_real=1,
-        aug_interpolate=0,
+        aug_interpolate=0.2,
         aug_translate=0,
         aug_rotate=0,
         use_dist=1,
-        fps=0,
+        fps=1,
     )
     dataset = PointCloudDataset(cfg, use_euler=True, npoints=1024, split="all")
     d = dataset[0]
@@ -374,7 +375,7 @@ def main():
     print("#positive:", user_clicked_labels[indices].size())
     print("click labels:", user_clicked_labels[indices])
     print("click labels max:", user_clicked_labels[indices].max())
-    dataset.save_vis("vis_dev", render_gripper=False)
+    #dataset.save_vis("vis_dev", render_gripper=False)
 
 if __name__ == "__main__":
     main()
