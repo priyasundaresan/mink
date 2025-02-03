@@ -1,70 +1,91 @@
-# mink
+# Mobile-SPHINX
 
-[![Build](https://img.shields.io/github/actions/workflow/status/kevinzakka/mink/ci.yml?branch=main)](https://github.com/kevinzakka/mink/actions)
-[![Coverage Status](https://coveralls.io/repos/github/kevinzakka/mink/badge.svg)](https://coveralls.io/github/kevinzakka/mink?branch=main)
-[![PyPI version](https://img.shields.io/pypi/v/mink)](https://pypi.org/project/mink/)
-![Banner for mink](https://github.com/kevinzakka/mink/blob/assets/banner.png?raw=true)
+Extension of _What's the Move? Hybrid Imitation Learning via Salient Points_ (SPHINX) to mobile manipulation setting.
 
-mink is a library for differential inverse kinematics in Python, based on the [MuJoCo](https://github.com/google-deepmind/mujoco) physics engine.
+[![Paper](https://img.shields.io/badge/Paper-%20%F0%9F%93%84-blue)](https://sphinx-manip.github.io/assets/sphinx.pdf)
+[![Website](https://img.shields.io/badge/Website-%F0%9F%8C%90-orange)](https://sphinx-manip.github.io/)
 
-Features include:
+## Clone and create Python environment
 
-* Task specification in configuration or operational space;
-* Limits on joint positions and velocities;
-* Collision avoidance between any geom pair;
-* Lie group interface for rigid body transformations.
-
-For usage and API reference, see the [documentation](https://kevinzakka.github.io/mink/).
-
-If you use mink in your research, please cite it as follows:
-
-```bibtex
-@software{Zakka_Mink_Python_inverse_2024,
-  author = {Zakka, Kevin},
-  license = {Apache-2.0},
-  month = jul,
-  title = {{Mink: Python inverse kinematics based on MuJoCo}},
-  url = {https://github.com/kevinzakka/mink},
-  version = {0.0.4},
-  year = {2024}
-}
+### Clone the repo.
+```shell
+git clone https://github.com/priyasundaresan/mink.git
 ```
 
-## Installation
+### Create conda env
 
-You can install `mink` using `pip`:
-
-```bash
-pip install mink
+First create a conda env:
+```shell
+conda env create -f mac_env.yml  
 ```
 
-To include the example dependencies:
+Then, source `set_env.sh` to activate the `tidybot` conda env and set the `PYTHONPATH` appropriately.
 
-```bash
-pip install "mink[examples]"
+```shell
+# NOTE: run this once per shell before running any script from this repo
+source set_env.sh
 ```
 
-## Examples
+## Data Collection for Mobile-SPHINX
+Remember to run `source set_env.sh`  once per shell before running any script from this repo.
+We collect data for training Mobile-SPHINX policies using Jimmy Wu's iPhone teleop interface to control TidyBot (along with a Whole Body Controller written using Kevin Zakka's `mink` library). I usually do this locally on my Mac:
+```shell
+source set_env.sh
+mjpython interactive_scripts/record_sim.py
+```
 
-mink works with a variety of robots, including:
+This will print out something like `Starting server at 10.30.163.179:5001`. Next, make sure your iPhone is connected to the same Wi-Fi network as your laptop, and that the app XRBrowser is installed. Open XRBrowser, and go to the IP address printed out by the script. You can then use your iPhone to teleoperate the robot. A few quick notes:
+* Make sure your iPhone has Portrait Lock Orientaton ON, and start with top of phone facing up not forward.
+* Click `Start episode` to start data collection, similarly `End episode` to finish an episode.
+* Your actions will only be mirrored when you are pressing the screen.
+* Swipe up/down to open/close the gripper. NOTE: the gripper is currently a bit finicky.
+* You'll definitely want to practice before collecting any useful datasets! :)
 
-* Arms: [UR5e](https://github.com/kevinzakka/mink/blob/main/examples/arm_ur5e_actuators.py), [iiwa14](https://github.com/kevinzakka/mink/blob/main/examples/arm_iiwa.py), [bimanual iiwa14](https://github.com/kevinzakka/mink/blob/main/examples/dual_iiwa.py)
-* Humanoids: [Unitree G1](https://github.com/kevinzakka/mink/blob/main/examples/humanoid_g1.py), [Unitree H1](https://github.com/kevinzakka/mink/blob/main/examples/humanoid_h1.py)
-* Quadrupeds: [Unitree Go1](https://github.com/kevinzakka/mink/blob/main/examples/quadruped_go1.py), [Boston Dynamics Spot](https://github.com/kevinzakka/mink/blob/main/examples/quadruped_spot.py)
-* Hands: [Shadow Hand](https://github.com/kevinzakka/mink/blob/main/examples/hand_shadow.py), [Allegro Hand](https://github.com/kevinzakka/mink/blob/main/examples/arm_hand_iiwa_allegro.py)
-* Mobile manipulators: [Stanford TidyBot](https://github.com/kevinzakka/mink/blob/main/examples/mobile_tidybot.py), [Hello Robot Stretch](https://github.com/kevinzakka/mink/blob/main/examples/mobile_stretch.py)
+If you just want to test out teleoperation using the iPhone (without recording any data), you can use:
+```shell
+source set_env.sh
+mjpython interactive_scripts/teleop_phone.py
+```
+Same instructions as above for connecting your iPhone and teleoperating.
 
-Check out the [examples](https://github.com/kevinzakka/mink/blob/main/examples/) directory for more code.
+To just test out the whole body controller, you can use the following script to control the robot using only mouse click & drag actions:
+```shell
+source set_env.sh
+mjpython interactive_scripts/teleop_phone.py
+```
+You will see a little red interaction cube at the end effector appear. You can `Double Click` to select it, then use `Ctrl + Right Click and Drag` to move it positionally, and `Ctrl + Left Click and Drag` to control orientation.
 
-## How can I help?
 
-Install the library, use it and report any bugs in the [issue tracker](https://github.com/kevinzakka/mink/issues) if you find any. If you're feeling adventurous, you can also check out the contributing [guidelines](CONTRIBUTING.md) and submit a pull request.
+## Training Mobile-SPHINX
 
-## Acknowledgements
+### Download data
 
-mink is a direct port of [Pink](https://github.com/stephane-caron/pink) which uses [Pinocchio](https://github.com/stack-of-tasks/pinocchio) under the hood. Stéphane Caron, the author of Pink, is a role model for open-source software in robotics. This library would not have been possible without his work and assistance throughout this project.
+Create a new `data` folder, and copy the data from `sc`: `/iliad/u/priyasun/mink/data` there.
 
-mink also heavily adapts code from the following libraries:
+### Training (on the cluster)
 
-* The lie algebra library that powers the transforms in mink is adapted from [jaxlie](https://github.com/brentyi/jaxlie).
-* The collision avoidance constraint is adapted from [dm_robotics](https://github.com/google-deepmind/dm_robotics/tree/main/cpp/controllers)'s LSQP controller.
+To train SPHINX, run the following (training logs and eval success rates will be logged to Weights & Biases).
+
+#### Commands
+
+```shell
+# cube
+python scripts/train_waypoint.py --config_path cfgs/waypoint/cube.yaml
+
+# drawer
+python scripts/train_waypoint.py --config_path cfgs/waypoint/drawer.yaml
+```
+
+Use `--save_dir PATH` to specify where to store the logs and models.
+Use `--use_wb 0` to disable logging to W&B (useful when debugging).
+
+### Evaluation (local, on a workstation)
+Assuming the resulting checkpoints are saved to `exps/waypoint/cube`, to eval the waypoint policy:
+```shell
+python scripts/eval_waypoint.py --model exps/waypoint/run1/ema.pt --record 1 --save_dir rollouts
+```
+
+This will save rollouts to the folder `rollouts`. You can use `python common_utils/display_rollouts.py` to creat a grid of all the rollout videos in a `.html` file that can easily be viewed in any browser.
+
+
+
