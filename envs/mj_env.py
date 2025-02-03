@@ -334,7 +334,7 @@ class MujocoEnv:
                     delta_euler = quaternion_to_euler_diff(action['arm_quat'], \
 		        				   record_obs['eef_quat'])
 
-                    print(delta_pos, delta_euler)
+                    #print(delta_pos, delta_euler)
 
                     # Delta action to record
                     record_delta_action = np.concatenate([delta_pos, \
@@ -566,5 +566,4 @@ if __name__ == "__main__":
 
     for fn in os.listdir("dev1"):
         if 'npz' in fn:
-            #env.waypoint_relabel_episode("dev1/%s"%fn)
-            env.hybrid_relabel_episode("dev1/%s"%fn)
+            env.waypoint_relabel_episode("dev1/%s"%fn)

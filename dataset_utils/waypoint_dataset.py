@@ -131,7 +131,7 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
                         break
                     waypoint_len += 1
                 assert waypoint_len > 0
-                #print(f"waypoint @step: {curr_waypoint_step}, len: {waypoint_len}")
+                print(f"waypoint @step: {curr_waypoint_step}, len: {waypoint_len}")
 
             elif mode == ActMode.Interpolate:
                 assert waypoint_len > 0
@@ -140,6 +140,9 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
                 # Keep this timestep only if we are doing temporal augmentation
                 if progress > aug_interpolate:
                     continue
+
+            elif mode == ActMode.Dense:
+                continue
 
             assert curr_waypoint is not None
             obs = step["obs"]
@@ -314,7 +317,7 @@ class PointCloudDataset(Dataset):
 
             clicks = clicks.unsqueeze(1)
             red = torch.tensor([1, 0, 0], dtype=torch.float32)
-            #colors = red * clicks + colors * (1 - clicks)
+            colors = red * clicks + colors * (1 - clicks)
 
             point_cloud = o3d.geometry.PointCloud()
             point_cloud.points = o3d.utility.Vector3dVector(points.numpy())
@@ -355,7 +358,7 @@ class PointCloudDataset(Dataset):
 
 def main():
     cfg = PointCloudDatasetConfig(
-        path="cube",
+        path="dev1_relabeled",
         is_real=1,
         aug_interpolate=0,
         aug_translate=0,
