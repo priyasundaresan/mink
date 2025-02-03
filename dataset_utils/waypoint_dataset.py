@@ -111,6 +111,11 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
                     continue
 
                 action = step["action"]
+
+                # Handle euler symmetry
+                if action[3] < 0:
+                    action[3] *= -1
+
                 curr_waypoint = {
                     "pos": action[:3],
                     "euler": action[3:6],
@@ -271,6 +276,7 @@ class PointCloudDataset(Dataset):
             action_rot = torch.from_numpy(data["action_euler"]).float()
         else:
             action_rot = torch.from_numpy(data["action_quat"]).float()
+        print(action_rot)
         action_gripper = torch.tensor(data["action_gripper"], dtype=torch.float32)
         proprio = torch.from_numpy(data["proprio"]).float()
         target_mode = torch.tensor(data["target_mode"]).long()
@@ -352,7 +358,7 @@ def main():
     cfg = PointCloudDatasetConfig(
         path="cube",
         is_real=1,
-        aug_interpolate=0.2,
+        aug_interpolate=0,
         aug_translate=0,
         aug_rotate=0,
         use_dist=1,
