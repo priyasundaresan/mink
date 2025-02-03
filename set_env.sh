@@ -1,2 +1,2 @@
-conda activate pytorch
+conda activate tidybot
 export PYTHONPATH=$PWD:$PWD/teleop
