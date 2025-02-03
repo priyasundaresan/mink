@@ -9,15 +9,18 @@ from teleop.policies import TeleopPolicy
 from scipy.spatial.transform import Rotation as R
 from interactive_scripts.dataset_recorder import DatasetRecorder, ActMode
 from envs.mj_utils.camera import Camera
-from envs.robot_utils import Proprio, LinearWaypointReach, quaternion_to_euler_diff
+from envs.robot_utils import Proprio, LinearWaypointReach, LinearWaypointReachConfig, quaternion_to_euler_diff
 from dataclasses import dataclass, field
 from common_utils import Stopwatch
 import pyrallis
 import argparse
 from dm_control.viewer import user_input
 import os
+from common_utils.eval_utils import (
+    check_for_interrupt,
+)
 
-def add_text(pos, viewer, input):
+def add_text(pos, viewer, input, color=(1,0,0)):
     # create an invisibale geom and add label on it
     geom = viewer.user_scn.geoms[viewer.user_scn.ngeom]
     mujoco.mjv_initGeom(
@@ -26,7 +29,7 @@ def add_text(pos, viewer, input):
         size=np.array([0.55, 0.55, 0.55]),  # label_size
         pos=pos+np.array([0.0, 0.0, 0.1]),  # lebel position, here is 1 meter above the root joint
         mat=np.eye(3).flatten(),  # label orientation, here is no rotation
-        rgba=np.array([1, 0, 0, 0])  # invisible
+        rgba=np.array([color[0], color[1], color[2], 1])  # invisible
     )
     geom.label = input  # receive string input only
     viewer.user_scn.ngeom += 1
@@ -104,12 +107,85 @@ class MujocoEnv:
             self.model, self.data, "pinch_site_target", "pinch_site", "site"
         )
         
-        # Randomize the position of the cube
-        randomized_position = np.random.uniform(low=(-0.07,-0.2,0), high=(0.07,0.2,0), size=3)
-        randomized_position[2] = 0.05
-        cube_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, "interactive_cube")
-        self.data.xpos[cube_body_id] += randomized_position
-        self.data.qpos[self.model.joint("cube_freejoint").id : self.model.joint("cube_freejoint").id + 3] += randomized_position
+        ## Task specific randomizations
+        if 'cube' in self.cfg.xml_file:
+            randomized_position = np.random.uniform(low=(-0.07,-0.2,0), high=(0.07,0.2,0), size=3)
+            randomized_position[2] = 0.05
+            interactive_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, "interactive_obj")
+            self.data.xpos[interactive_body_id] += randomized_position
+            self.data.qpos[self.model.joint("interactive_obj_freejoint").id : self.model.joint("interactive_obj_freejoint").id + 3] += randomized_position
+
+        elif 'open' in self.cfg.xml_file:
+            proprio = self.observe_proprio()
+            randomized_position = np.random.uniform(low=(-0.2,-0.3,-0.3), high=(0.0,0.3,0), size=3)
+            self.move_to(proprio.eef_pos + randomized_position, proprio.eef_euler, 0.0, None, None)
+
+    def move_to(
+        self,
+        target_pos: np.ndarray,
+        target_euler: np.ndarray,
+        gripper_closed: float,
+        viewer,
+        recorder,
+        ):
+        wpr_cfg = LinearWaypointReachConfig()
+        wpr_cfg.pos_threshold = 0.01
+        wpr_cfg.pos_step_size = 0.08
+        wpr_cfg.rot_threshold = 0.05
+        wpr_cfg.rot_step_size = 0.3
+
+        waypoint_reach = LinearWaypointReach(
+            target_pos,
+            target_euler,
+            wpr_cfg,
+        )
+        terminate = False
+
+        proprio = self.observe_proprio()
+        initially_open = proprio.gripper_width > 0.95
+
+        for i in range(50):
+            obs = self.observe()
+            if recorder is not None:
+                recorder.add_numpy(obs, ["viewer_image"])
+
+            pos_cmd, euler_cmd, reached = waypoint_reach.step(
+                obs['eef_pos'], obs['eef_euler']
+            )
+
+            action = {'base_pose': np.zeros(3), \
+                      'arm_pos': pos_cmd * [1, -1, 1], \
+                      'arm_quat': R.from_euler('xyz', euler_cmd).as_quat()}
+
+            gripper_action = 0 if initially_open else 1
+
+            self.step(action, gripper_action)
+
+            if reached:
+                break
+
+            if check_for_interrupt():
+                print('Interrupt')
+                terminate = True
+                break
+
+            if viewer is not None:
+                viewer.sync()
+            self.rate_limiter.sleep()
+
+        # Apply gripper action afterwards
+        for i in range(40):
+            obs = self.observe()
+            if recorder is not None:
+                recorder.add_numpy(obs, ["viewer_image"])
+
+            self.step(action, gripper_closed)
+            if viewer is not None:
+                viewer.sync()
+            self.rate_limiter.sleep()
+
+        return reached, terminate
+
 
     def step(self, action, gripper_closed, is_delta=False):
 
@@ -236,6 +312,7 @@ class MujocoEnv:
                 obs = {
                     'base_pose': np.zeros(3),
                     'arm_pos': self.data.mocap_pos[0],
+                    'arm_pos': self.data.mocap_pos[0],
                     'arm_quat': self.data.mocap_quat[0][[3, 1, 0, 2]] * [1, -1, 1, 1],
                     'gripper_pos': np.zeros(1),
                 }
@@ -249,13 +326,15 @@ class MujocoEnv:
                     action['arm_euler'] = R.from_quat(action['arm_quat']).as_euler('xyz')
 
                     # Absolute action to record
-                    record_action = np.concatenate([action['arm_pos'], \
+                    record_action = np.concatenate([action['arm_pos']*[1, -1, 1], \
 					              action['arm_euler'], \
 						      action['gripper_pos']])
 
-                    delta_pos = action['arm_pos'] - record_obs['eef_pos']
+                    delta_pos = record_action[:3] - record_obs['eef_pos']
                     delta_euler = quaternion_to_euler_diff(action['arm_quat'], \
 		        				   record_obs['eef_quat'])
+
+                    #print(delta_pos, delta_euler)
 
                     # Delta action to record
                     record_delta_action = np.concatenate([delta_pos, \
@@ -324,7 +403,7 @@ class MujocoEnv:
                     ## Absolute Replay
                     action = {
                         'base_pose': np.zeros(3),
-                        'arm_pos': recorded_action[:3],
+                        'arm_pos': recorded_action[:3] * [1,-1,1],
                         'arm_quat': R.from_euler('xyz', recorded_action[3:6]).as_quat(),
                         'gripper_pos': np.array(recorded_action[-1]),
                         'base_image': np.zeros((640, 360, 3)),
@@ -354,7 +433,7 @@ class MujocoEnv:
                 # Increment the step counter
                 step_counter += 1
 
-    def relabel_episode(self, episode_fn):
+    def waypoint_relabel_episode(self, episode_fn):
         demo = np.load(episode_fn, allow_pickle=True)['arr_0']
         key_queue = queue.Queue()
 
@@ -393,13 +472,14 @@ class MujocoEnv:
 
                     # Collect and process key inputs
                     while not key_queue.empty():
-                        if self.keyboard_callback(key_queue.get()):
+                        key = self.keyboard_callback(key_queue.get())
+                        if key:
                             waypoint_idxs.append(episode_counter)
                             add_text(recorded_action[:3], viewer, str(len(waypoint_idxs)-1))
 
                     action = {
                         'base_pose': np.zeros(3),
-                        'arm_pos': recorded_action[:3],
+                        'arm_pos': recorded_action[:3] * [1,-1,1],
                         'arm_quat': R.from_euler('xyz', recorded_action[3:6]).as_quat(),
                         'gripper_pos': np.array(recorded_action[-1]),
                         'base_image': np.zeros((640, 360, 3)),
@@ -433,16 +513,46 @@ class MujocoEnv:
 
                 curr_waypoint_step = waypoint_idxs.pop(0)
                 waypoint_idx += 1
+            else:
+                step['mode'] = ActMode.Interpolate
 
             step['waypoint_idx'] = waypoint_idx
 
         for t, step in enumerate(list(demo)):
             print(step['mode'], step['waypoint_idx'], step['action'])
 
-        if not os.path.exists('devrelabel'):
-            os.mkdir('devrelabel')
+        if not os.path.exists('dev1_relabeled'):
+            os.mkdir('dev1_relabeled')
 
-        np.savez(episode_fn.replace('dev1', 'devrelabel'), demo)
+        np.savez(episode_fn.replace('dev1', 'dev1_relabeled'), demo)
+
+        #waypoint_idx = -1
+        #curr_waypoint_step = 0
+
+        #for t, step in enumerate(list(demo)):
+
+        #    if t == curr_waypoint_step and len(waypoint_idxs):
+
+        #        waypoint_action = list(demo)[waypoint_idxs[0]]['action'] 
+
+        #        step['action'] = waypoint_action
+        #        step['mode'] = ActMode.Waypoint
+        #        step['waypoint_idx'] = waypoint_idx
+
+        #        curr_waypoint_step = waypoint_idxs.pop(0)
+        #        waypoint_idx += 1
+        #    else:
+        #        step['mode'] = ActMode.Interpolate
+
+        #    step['waypoint_idx'] = waypoint_idx
+
+        #for t, step in enumerate(list(demo)):
+        #    print(step['mode'], step['waypoint_idx'], step['action'])
+
+        #if not os.path.exists('dev1_relabeled'):
+        #    os.mkdir('dev1_relabeled')
+
+        #np.savez(episode_fn.replace('dev1', 'dev1_relabeled'), demo)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -456,4 +566,4 @@ if __name__ == "__main__":
 
     for fn in os.listdir("dev1"):
         if 'npz' in fn:
-            env.relabel_episode("dev1/%s"%fn)
+            env.waypoint_relabel_episode("dev1/%s"%fn)

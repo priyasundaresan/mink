@@ -5,6 +5,7 @@ import pandas as pd
 import spatialmath as sm
 import spatialmath.base as smb
 from scipy.spatial.transform import Rotation as R
+import matplotlib.pyplot as plt
 
 def depth_to_point_cloud(depth_image, K, T) -> np.ndarray:
     # Get image dimensions
@@ -37,7 +38,7 @@ def depth_to_point_cloud(depth_image, K, T) -> np.ndarray:
     points_world = points_world_homog[:3, :].T
     return points_world
 
-def pcl_from_obs(obs):
+def pcl_from_obs(obs, crop=True):
     merged_points = []
     merged_colors = []
 
@@ -53,12 +54,14 @@ def pcl_from_obs(obs):
         points = depth_to_point_cloud(depth_image, intrinsics, extrinsics)
         colors = rgb_image.reshape(points.shape) / 255  # Normalize color values
 
-        z_mask = points[..., 2] > 0.02
-        points = points[z_mask]
-        colors = colors[z_mask]
+        if crop:
+            z_mask = points[..., 2] > 0.02
+            points = points[z_mask]
+            colors = colors[z_mask]
 
         merged_points.append(points)
         merged_colors.append(colors)
+        break
 
     merged_points = np.vstack(merged_points)
     merged_colors = np.vstack(merged_colors)

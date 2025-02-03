@@ -76,7 +76,7 @@ def label_salient_points(episode_fn):
 
     for t, step in enumerate(list(demo)):
         if step['mode'] == ActMode.Waypoint:
-            merged_points, merged_colors = pcl_from_obs(step["obs"])
+            merged_points, merged_colors = pcl_from_obs(step["obs"], crop=True)
 
             viewer = PointCloudViewer(merged_points=merged_points, merged_colors=merged_colors, index=t)
             viewer.display_point_cloud()
@@ -94,6 +94,6 @@ def label_salient_points(episode_fn):
 
 if __name__ == "__main__":
     # Example usage
-    for fn in sorted(os.listdir('devrelabel')):
+    for fn in sorted(os.listdir('dev1_relabeled')):
         if 'npz' in fn:
-            label_salient_points(os.path.join('devrelabel', fn))
+            label_salient_points(os.path.join('dev1_relabeled', fn))

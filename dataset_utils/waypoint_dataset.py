@@ -131,15 +131,18 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
                         break
                     waypoint_len += 1
                 assert waypoint_len > 0
-                #print(f"waypoint @step: {curr_waypoint_step}, len: {waypoint_len}")
+                print(f"waypoint @step: {curr_waypoint_step}, len: {waypoint_len}")
 
-            elif mode == ActMode.Dense:
+            elif mode == ActMode.Interpolate:
                 assert waypoint_len > 0
                 step["click"] = curr_waypoint["click"]
                 progress = (t - curr_waypoint_step) / waypoint_len
                 # Keep this timestep only if we are doing temporal augmentation
                 if progress > aug_interpolate:
                     continue
+
+            elif mode == ActMode.Dense:
+                continue
 
             assert curr_waypoint is not None
             obs = step["obs"]
@@ -198,6 +201,7 @@ class PointCloudDatasetConfig:
         PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
         DATASETS = {
             "cube": os.path.join(PROJECT_ROOT, "data/cube"),
+            "cabinet": os.path.join(PROJECT_ROOT, "data/cabinet"),
         }
         if self.path in DATASETS:
             self.path = DATASETS[self.path]
@@ -276,7 +280,6 @@ class PointCloudDataset(Dataset):
             action_rot = torch.from_numpy(data["action_euler"]).float()
         else:
             action_rot = torch.from_numpy(data["action_quat"]).float()
-        print(action_rot)
         action_gripper = torch.tensor(data["action_gripper"], dtype=torch.float32)
         proprio = torch.from_numpy(data["proprio"]).float()
         target_mode = torch.tensor(data["target_mode"]).long()
@@ -313,7 +316,7 @@ class PointCloudDataset(Dataset):
             points, colors = pcd.split([3, 3], dim=1)
 
             clicks = clicks.unsqueeze(1)
-            red = torch.tensor([0, 0, 1], dtype=torch.float32)
+            red = torch.tensor([1, 0, 0], dtype=torch.float32)
             colors = red * clicks + colors * (1 - clicks)
 
             point_cloud = o3d.geometry.PointCloud()
@@ -341,7 +344,6 @@ class PointCloudDataset(Dataset):
                 )
                 gripper_vis.paint_uniform_color([0.0, 0.0, 0.8])
                 rotation_matrix = R.from_euler("xyz", proprio[3:6]).as_matrix()
-                default_rot = R.from_euler("x", -np.pi / 2).as_matrix()
                 rotation_matrix = rotation_matrix @ default_rot
                 transform = np.eye(4)
                 transform[:3, :3] = rotation_matrix
@@ -356,13 +358,13 @@ class PointCloudDataset(Dataset):
 
 def main():
     cfg = PointCloudDatasetConfig(
-        path="cube",
+        path="dev1_relabeled",
         is_real=1,
         aug_interpolate=0,
         aug_translate=0,
         aug_rotate=0,
         use_dist=1,
-        fps=1,
+        fps=0,
     )
     dataset = PointCloudDataset(cfg, use_euler=True, npoints=1024, split="all")
     d = dataset[0]
@@ -372,7 +374,7 @@ def main():
     print("#positive:", user_clicked_labels[indices].size())
     print("click labels:", user_clicked_labels[indices])
     print("click labels max:", user_clicked_labels[indices].max())
-    #dataset.save_vis("vis_dev", render_gripper=False)
+    dataset.save_vis("vis_dev", render_gripper=False)
 
 if __name__ == "__main__":
     main()

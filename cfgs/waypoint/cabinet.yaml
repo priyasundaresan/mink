@@ -1,6 +1,6 @@
 dataset:
   is_real: 0
-  path: data/cube
+  path: data/cabinet
   repeat: 20
   use_dist: 1
   aug_translate: 1
@@ -17,4 +17,5 @@ waypoint:
 batch_size: 64
 cosine_schedule: 1
 use_wb: 1
+save_dir: exps/waypoint/cabinet
 use_ema: 1

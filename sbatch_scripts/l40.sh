@@ -8,8 +8,8 @@
 #SBATCH --gres=gpu:l40s:1
 #SBATCH --output=%A.out
 #SBATCH --error=%A.err
-#SBATCH --job-name="act3d can"
-#SBATCH --nodelist="iliad8"
+#SBATCH --job-name="tidybot_cabinet_waypoint"
+#SBATCH --nodelist="iliad9"
 
 echo "SLURM_JOBID="$SLURM_JOBID
 echo "SLURM_JOB_NODELIST"=$SLURM_JOB_NODELIST
@@ -20,5 +20,5 @@ echo "working directory = "$SLURM_SUBMIT_DIR
 source /iliad/u/priyasun/miniconda3/bin/activate
 cd /iliad/u/priyasun/mink
 source set_env.sh
-python scripts/train_waypoint.py --config cfgs/waypoint/cube.yaml
+python scripts/train_waypoint.py --config cfgs/waypoint/cabinet.yaml
 wait

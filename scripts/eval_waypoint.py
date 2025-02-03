@@ -11,8 +11,8 @@ from envs.mj_utils.camera_utils import pcl_from_obs
 from models.waypoint_transformer import WaypointTransformer
 from scipy.spatial.transform import Rotation as R
 import common_utils
+import open3d as o3d
 
-#@torch.no_grad
 def eval_waypoint(
     policy: WaypointTransformer,
     env_cfg: str,
@@ -22,60 +22,55 @@ def eval_waypoint(
     record: bool,
 ):
     assert not policy.training
-    with torch.no_grad():
+    env_cfg = pyrallis.load(MujocoEnvConfig, open(env_cfg, "r"))
+    env = MujocoEnv(env_cfg)
+    np.random.seed(seed)
+    env.reset()
 
-        env_cfg = pyrallis.load(MujocoEnvConfig, open(env_cfg, "r"))
-        env = MujocoEnv(env_cfg)
-        np.random.seed(seed)
-        env.reset()
+    recorder = None
+    if record:
+        assert save_dir is not None
+        recorder = common_utils.Recorder(save_dir)
 
-        recorder = None
-        if record:
-            assert save_dir is not None
-            recorder = common_utils.Recorder(save_dir)
+    freeze_counter = 0
 
-        freeze_counter = 0
-        while True:
-            with mj.viewer.launch_passive(
-                model=env.model,
-                data=env.data,
-                show_left_ui=False,
-                show_right_ui=False,
-            ) as viewer:
+
+    with mj.viewer.launch_passive(
+        model=env.model,
+        data=env.data,
+        show_left_ui=False,
+        show_right_ui=False,
+    ) as viewer:
     
-                mj.mjv_defaultFreeCamera(env.model, viewer.cam)
+        reached = True
+        terminate = False
+        mj.mjv_defaultFreeCamera(env.model, viewer.cam)
     
-                reached = True
-                while viewer.is_running():
-                    obs = env.observe()
+        while viewer.is_running() and not terminate:
+            obs = env.observe()
+            recorder.add_numpy(obs, ["viewer_image"])
 
-                    points, colors = pcl_from_obs(obs)
-                    proprio = obs["proprio"]
+            points, colors = pcl_from_obs(obs)
+            point_cloud = o3d.geometry.PointCloud()
+            point_cloud.points = o3d.utility.Vector3dVector(points)
+            point_cloud.colors = o3d.utility.Vector3dVector(colors)
+            o3d.io.write_point_cloud('test.pcd', point_cloud)
+            proprio = obs["proprio"]
 
-                    if reached:
-                        print('Inferring')
-                        _, pos_cmd, euler_cmd, gripper_cmd, _ = policy.inference(
-                            torch.from_numpy(points).float(),
-                            torch.from_numpy(colors).float(),
-                            torch.from_numpy(proprio).float(),
-                            num_pass=num_pass,
-                        )
+            if reached:
+                with torch.no_grad():
+                    _, pos_cmd, euler_cmd, gripper_cmd, _ = policy.inference(
+                        torch.from_numpy(points).float(),
+                        torch.from_numpy(colors).float(),
+                        torch.from_numpy(proprio).float(),
+                        num_pass=num_pass,
+                    )
 
-                        action = {'base_pose': np.zeros(3), \
-                                  'arm_pos': pos_cmd, \
-                                  'arm_quat': R.from_euler('xyz', euler_cmd).as_quat()}
-                    gripper_action = float(gripper_cmd)
-
-                    env.step(action, gripper_action)
-                    eef_pos = obs['eef_pos']*[1,-1,1]
-                    pos_err = np.linalg.norm(eef_pos - pos_cmd)
-                    reached = pos_err < 8e-3
-                    print(pos_err)
-                    
-                    viewer.sync()
-                    #env.rate_limiter.sleep()
-
-        return 
+            reached, terminate = env.move_to(pos_cmd, euler_cmd, float(gripper_cmd), viewer, recorder)
+            
+    if recorder is not None:
+        recorder.save(f"s{seed}", fps=150)
+    return 
 
 def main():
     import os
@@ -85,7 +80,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True, help="model path")
     parser.add_argument("--seed", type=int, default=99999)
-    parser.add_argument("--num_episode", type=int, default=10)
+    parser.add_argument("--num_episode", type=int, default=20)
     parser.add_argument("--topk", type=int, default=-1)
     parser.add_argument("--num_pass", type=int, default=3)
     parser.add_argument("--save_dir", type=str, default=None)
@@ -103,7 +98,7 @@ def main():
     policy = policy.cuda()
 
     scores = []
-    for seed in range(args.seed, args.seed + args.num_episode):
+    for idx, seed in enumerate(range(args.seed, args.seed + args.num_episode)):
         eval_waypoint(
             policy,
             args.env_cfg,
@@ -112,9 +107,8 @@ def main():
             save_dir=args.save_dir,
             record=args.record,
         )
-
-        print(f"{model}")
         print(common_utils.wrap_ruler("", max_len=80))
 
 if __name__ == "__main__":
+    # python scripts/eval_waypoint.py --model exps/waypoint/run1/ema.pt --record 1 --save_dir rollouts
     main()

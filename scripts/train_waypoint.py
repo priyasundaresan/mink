@@ -222,7 +222,7 @@ class MainConfig(common_utils.RunConfig):
     eval_per_epoch: int = 1
     save_per: int = -1
     num_eval_episode: int = 20
-    save_dir: str = "exps/waypoint"
+    save_dir: str = "exps/waypoint/run1"
     use_wb: int = 0
 
 
