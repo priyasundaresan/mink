@@ -4,3 +4,4 @@ _templates/
 htmlcov/
 
 *.pyc
+dev1/
