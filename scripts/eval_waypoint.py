@@ -54,17 +54,21 @@ def eval_waypoint(
             point_cloud = o3d.geometry.PointCloud()
             point_cloud.points = o3d.utility.Vector3dVector(points)
             point_cloud.colors = o3d.utility.Vector3dVector(colors)
-            o3d.io.write_point_cloud('test.pcd', point_cloud)
             proprio = obs["proprio"]
+
 
             if reached:
                 with torch.no_grad():
-                    _, pos_cmd, euler_cmd, gripper_cmd, _ = policy.inference(
+                    _, pos_cmd, rot_cmd, gripper_cmd, mode = policy.inference(
                         torch.from_numpy(points).float(),
                         torch.from_numpy(colors).float(),
                         torch.from_numpy(proprio).float(),
                         num_pass=num_pass,
                     )
+                    if policy.cfg.use_euler:
+                        euler_cmd = rot_cmd
+                    else:
+                        euler_cmd = R.from_quat(rot_cmd).as_euler('xyz')
 
             reached, terminate = env.move_to(pos_cmd, euler_cmd, float(gripper_cmd), viewer, recorder)
             
@@ -110,5 +114,5 @@ def main():
         print(common_utils.wrap_ruler("", max_len=80))
 
 if __name__ == "__main__":
-    # python scripts/eval_waypoint.py --model exps/waypoint/run1/ema.pt --record 1 --save_dir rollouts
+    # python scripts/eval_waypoint.py --model exps/waypoint/cube/ema.pt --record 1 --save_dir rollouts
     main()

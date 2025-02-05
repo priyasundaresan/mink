@@ -119,21 +119,28 @@ class DenseDataset:
                 # The action consists of: 3 dims for pos, 3 for rot, 1 for gripper, 1 for mode (Waypoint/Dense/Terminate)
                 if self.cfg.predict_mode:
                     action = np.zeros(8)
-                    action[:7] = timestep["action"]
-                    #action[:7] = timestep["delta_action"]
+
+                    ee_pos = timestep["action"][:3]
+                    ee_quat = R.from_euler('xyz', timestep["action"][3:6]).as_quat()
+                    if ee_quat[0] < 0:
+                        ee_quat *= -1
+
+                    action[:3] = ee_pos 
+                    action[3:7] = ee_quat
+                    action[7] = timestep["action"][6]
 
                     if t > len(raw_episode) - TERMINATE_WINDOW:
-                        action[7] = ActMode.Terminate.value
+                        action[8] = ActMode.Terminate.value
 
                     elif timestep["mode"] == ActMode.Dense:
-                        action[7] = (
+                        action[8] = (
                             ActMode.Waypoint.value
                             if raw_episode[t + 1]["mode"] != ActMode.Dense
                             else ActMode.Dense.value
                         )
 
                     else:
-                        action[7] = (
+                        action[8] = (
                             ActMode.Dense.value
                             if raw_episode[t + 1]["mode"] == ActMode.Dense
                             else ActMode.Waypoint.value
