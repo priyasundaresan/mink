@@ -7,6 +7,7 @@ import torchvision.transforms as transforms
 
 from common_utils import get_all_files
 from interactive_scripts.dataset_recorder import ActMode
+from scipy.spatial.transform import Rotation as R
 
 
 class DenseInputProcessor:
@@ -118,7 +119,7 @@ class DenseDataset:
 
                 # The action consists of: 3 dims for pos, 3 for rot, 1 for gripper, 1 for mode (Waypoint/Dense/Terminate)
                 if self.cfg.predict_mode:
-                    action = np.zeros(8)
+                    action = np.zeros(9)
 
                     ee_pos = timestep["action"][:3]
                     ee_quat = R.from_euler('xyz', timestep["action"][3:6]).as_quat()
