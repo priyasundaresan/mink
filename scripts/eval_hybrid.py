@@ -90,12 +90,9 @@ def run_dense_mode(env, dense_dataset, dense_policy, viewer, recorder):
 
             action = cached_actions.pop(0)
 
-            ee_pos, ee_euler, gripper_open = action.split([3, 3, 1])
+            ee_pos, ee_quat, gripper_open, mode = action.split([3, 4, 1, 1])
             ee_pos = ee_pos.detach().cpu().numpy()
-            ee_euler = ee_euler.detach().cpu().numpy()
-            ee_quat = R.from_euler('xyz', ee_euler).as_quat()
-            if ee_quat[0] < 0:
-                ee_quat *= -1
+            ee_quat = ee_quat.detach().cpu().numpy()
 
             action = {
                 'base_pose': np.zeros(3),
