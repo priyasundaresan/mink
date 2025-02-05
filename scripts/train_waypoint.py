@@ -128,7 +128,11 @@ def run_one_epoch(
                 rot_loss = points_rot_loss.mean(0)
             else:
                 assert action_rot.size() == pred_rot.size()
-                rot_loss = F.mse_loss(pred_rot, action_rot.cuda())
+                if not policy.cfg.use_euler:
+                    pred_rot_norm = pred_rot / torch.norm(pred_rot, dim=-1, keepdim=True).clamp(min=1e-6)
+                    rot_loss = F.mse_loss(pred_rot_norm, action_rot.cuda())
+                else:
+                    rot_loss = F.mse_loss(pred_rot, action_rot.cuda())
 
             # combine
             loss = click_loss + gripper_loss + rot_loss + pos_loss + mode_loss
