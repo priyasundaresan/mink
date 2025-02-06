@@ -28,7 +28,7 @@ class Recorder:
         combined = np.concatenate(combined, axis=1)
         self.combined_frames.append(combined)
 
-    def add_numpy(self, obs: dict, cameras: list[str]):
+    def add_numpy(self, obs: dict, cameras: list[str], color=None):
         combined = []
         for cam in cameras:
             image = obs[cam]
@@ -37,9 +37,13 @@ class Recorder:
             combined.append(image)
 
         combined = np.concatenate(combined, axis=1)
+        if color is not None:
+            combined[:20, :, :] = color
+
         self.combined_frames.append(combined)
 
     def save(self, name, fps=10):
+        print('Saving', len(self.combined_frames))
         path = os.path.join(self.save_dir, f"{name}.mp4")
         # print(f"saving video to {path}")
         # control freq defaults to 0

@@ -22,7 +22,7 @@ from common_utils.eval_utils import (
     check_for_interrupt,
 )
 
-def eval_waypoint(
+def eval_hybrid(
     waypoint_policy,
     dense_policy,
     dense_dataset,
@@ -56,14 +56,16 @@ def eval_waypoint(
         mj.mjv_defaultFreeCamera(env.model, viewer.cam)
 
         mode = ActMode.Waypoint.value
-        while viewer.is_running() and mode != ActMode.Terminate.value:
+        while viewer.is_running():
             if mode == ActMode.Waypoint.value: 
                 mode = run_waypoint_mode(env, waypoint_policy, num_pass, viewer, recorder)
             elif mode == ActMode.Dense.value:
                 mode = run_dense_mode(env, dense_dataset, dense_policy, viewer, recorder)
-            
-    if recorder is not None:
-        recorder.save(f"s{seed}", fps=150)
+            elif mode == ActMode.Terminate.value:
+                print('Terminate')
+                if recorder is not None:
+                    recorder.save(f"s{seed}", fps=150)
+                return
     return 
 
 def run_dense_mode(env, dense_dataset, dense_policy, viewer, recorder):
@@ -73,6 +75,11 @@ def run_dense_mode(env, dense_dataset, dense_policy, viewer, recorder):
     step_counter = 0  # Counter to track simulation steps
     action = None
     gripper_state = 1 #TODO
+
+    consecutive_modes_required = 5 
+    WAYPOINT_THRESH = 0.5
+    TERMINATE_THRESH = 1.3
+    mode_history = []
 
     while mode == ActMode.Dense.value:
         if step_counter % image_capture_interval == 0:
@@ -90,9 +97,21 @@ def run_dense_mode(env, dense_dataset, dense_policy, viewer, recorder):
 
             action = cached_actions.pop(0)
 
-            ee_pos, ee_quat, gripper_open, mode = action.split([3, 4, 1, 1])
-            ee_pos = ee_pos.detach().cpu().numpy()
+            ee_pos, ee_quat, gripper_open, raw_mode = action.split([3, 4, 1, 1])
             ee_quat = ee_quat.detach().cpu().numpy()
+            ee_quat /= np.linalg.norm(ee_quat)
+            print(ee_quat)
+            ee_pos = ee_pos.detach().cpu().numpy()
+
+            if len(mode_history) == consecutive_modes_required:
+                if np.all(np.array(mode_history) < WAYPOINT_THRESH):
+                    mode = ActMode.Waypoint.value
+                elif np.all(np.array(mode_history) > TERMINATE_THRESH):
+                    mode = ActMode.Terminate.value
+                else:
+                    mode = ActMode.Dense.value
+                mode_history = []
+            mode_history.append(raw_mode.item())
 
             action = {
                 'base_pose': np.zeros(3),
@@ -103,8 +122,8 @@ def run_dense_mode(env, dense_dataset, dense_policy, viewer, recorder):
                 'wrist_image': np.zeros((640, 480, 3)),
             }
 
-        if recorder is not None:
-            recorder.add_numpy(obs, ["viewer_image"])
+        if recorder is not None and step_counter % 4 == 0:
+            recorder.add_numpy(obs, ["viewer_image"], color=(255, 140, 0))
 
         gripper_state = gripper_state if not action else action['gripper_pos'] 
         env.step(action, gripper_state)
@@ -116,7 +135,8 @@ def run_dense_mode(env, dense_dataset, dense_policy, viewer, recorder):
         step_counter += 1
 
         if check_for_interrupt():
-            mode = ActMode.Terminate
+            mode = ActMode.Terminate.value
+    return mode
 
 def run_waypoint_mode(env, waypoint_policy, num_pass, viewer, recorder):
     num_waypoint_inferences = 0
@@ -150,7 +170,9 @@ def run_waypoint_mode(env, waypoint_policy, num_pass, viewer, recorder):
                 if num_waypoint_inferences == 2:
                     mode = ActMode.Dense.value
 
-        reached, _ = env.move_to(pos_cmd, euler_cmd, float(gripper_cmd), viewer, recorder)
+        reached, terminate = env.move_to(pos_cmd, euler_cmd, float(gripper_cmd), viewer, recorder)
+        if terminate:
+            mode = ActMode.Dense.value
     return mode
 
 def main():
@@ -186,7 +208,7 @@ def main():
 
     scores = []
     for idx, seed in enumerate(range(args.seed, args.seed + args.num_episode)):
-        eval_waypoint(
+        eval_hybrid(
             waypoint_policy,
             dense_policy,
             dense_dataset,
