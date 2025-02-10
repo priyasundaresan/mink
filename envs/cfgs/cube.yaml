@@ -1,0 +1,9 @@
+cameras:
+  - viewer
+  - base1
+  - base2
+  - wrist
+task: cube
+data_folder: dev1
+image_size: 224
+crop_floor: 1
