@@ -109,6 +109,7 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
                 if data[t + 1]["mode"] == ActMode.Waypoint:
                     print(f"Warninig: skip step {t} in {fn} because the next one is also waypoint")
                     continue
+                assert data[t + 1]["mode"] == ActMode.Interpolate
 
                 action = step["action"]
                 action_quat = R.from_euler("xyz", action[3:6]).as_quat()
@@ -124,25 +125,27 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
                     "gripper": action[-1],
                     "click": step["click"],  # a single vector of length 3
                 }
+
                 curr_waypoint_step = t
                 waypoint_len = 0
-                for k in range(t, len(list(data))-1):
-                    if data[k+1]["mode"] == ActMode.Waypoint:
-                        target_mode = data[k+1]["mode"]
+                for k in range(t + 1, len(list(data))):
+                    if data[k]["mode"] != ActMode.Interpolate:
+                        target_mode = data[k]["mode"]
                         break
                     waypoint_len += 1
                 assert waypoint_len > 0
 
-            elif mode == ActMode.Interpolate:
+            if mode not in [ActMode.Waypoint, ActMode.Interpolate]:
+                # Skip dense timesteps and non-terminal timesteps
+                continue
+
+            if mode == ActMode.Interpolate:
                 assert waypoint_len > 0
                 step["click"] = curr_waypoint["click"]
                 progress = (t - curr_waypoint_step) / waypoint_len
                 # Keep this timestep only if we are doing temporal augmentation
                 if progress > aug_interpolate:
                     continue
-
-            elif mode == ActMode.Dense:
-                continue
 
             assert curr_waypoint is not None
             obs = step["obs"]
@@ -178,6 +181,8 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
             episode.append(processed_data)
             datas.append(processed_data)
             max_num_points = max(max_num_points, points.shape[0])
+
+            print(mode, target_mode)
 
         episodes.append(episode)
     return datas, episodes, max_num_points
@@ -361,8 +366,8 @@ class PointCloudDataset(Dataset):
 def main():
     cfg = PointCloudDatasetConfig(
         path="data/cabinet",
-        is_real=1,
-        aug_interpolate=0.2,
+        is_real=0,
+        aug_interpolate=0,
         aug_translate=0,
         aug_rotate=0,
         use_dist=1,
