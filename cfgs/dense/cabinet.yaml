@@ -1,7 +1,7 @@
 dataset:
   path: data/cabinet
   camera_views: wrist_image+base1_image+base2_image
-  predict_mode: 0
+  predict_mode: 1
 dp:
   shift_pad: 6
   cond_unet:

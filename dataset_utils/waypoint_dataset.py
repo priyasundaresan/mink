@@ -111,11 +111,16 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
                     continue
 
                 action = step["action"]
+                action_quat = R.from_euler("xyz", action[3:6]).as_quat()
 
+                # Handle quaternion symmetry:
+                if action_quat[0] < 0:
+                    action_quat *= -1
+                
                 curr_waypoint = {
                     "pos": action[:3],
                     "euler": action[3:6],
-                    "quat": R.from_euler("xyz", action[3:6]).as_quat(),  # type: ignore
+                    "quat": action_quat,  # type: ignore
                     "gripper": action[-1],
                     "click": step["click"],  # a single vector of length 3
                 }
@@ -151,7 +156,7 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
             click_idxs = dist_to_click <= radius
             user_clicks = np.zeros((len(points),)).astype(points.dtype)
             user_clicks[click_idxs] = 1.0
-            if user_clicks.sum() == 0.0:
+            if user_clicks.sum() < 300.0:
                 continue
             assert user_clicks.sum() != 0
 
@@ -363,7 +368,7 @@ def main():
         use_dist=1,
         fps=1,
     )
-    dataset = PointCloudDataset(cfg, use_euler=True, npoints=1024, split="all")
+    dataset = PointCloudDataset(cfg, use_euler=False, npoints=1024, split="all")
     d = dataset[0]
     print("target_mode", d[-1].item())
     user_clicked_labels = d[2] / d[2].sum()

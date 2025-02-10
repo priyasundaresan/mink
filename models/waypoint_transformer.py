@@ -229,11 +229,16 @@ class WaypointTransformer(nn.Module):
                 selected_rot = rot.gather(1, click_indices.unsqueeze(2).repeat(1, 1, 3))
                 rot = selected_rot.flatten(0, 1)
 
-            assert self.cfg.use_euler
-            rot_quat = R.from_euler("xyz", rot.cpu().numpy()).as_quat()  # type: ignore
-            rot_quat = np.mean(rot_quat, axis=0)
-            rot_quat /= np.linalg.norm(rot_quat)
-            target_rot = R.from_quat(rot_quat).as_euler("xyz")
+            if self.cfg.use_euler:
+                rot_quat = R.from_euler("xyz", rot.cpu().numpy()).as_quat()  # type: ignore
+                rot_quat = np.mean(rot_quat, axis=0)
+                rot_quat /= np.linalg.norm(rot_quat)
+                target_rot = R.from_quat(rot_quat).as_euler("xyz")
+            else:
+                rot_quat = rot.cpu().numpy()
+                rot_quat = np.mean(rot_quat, axis=0)
+                rot_quat /= np.linalg.norm(rot_quat)
+                target_rot = rot_quat
 
             gripper = nn.functional.sigmoid(gripper_logit).mean()
             gripper = gripper.round().item()
