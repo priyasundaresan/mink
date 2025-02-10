@@ -112,10 +112,6 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
 
                 action = step["action"]
 
-                # Handle euler symmetry
-                if action[3] < 0:
-                    action[3] *= -1
-
                 curr_waypoint = {
                     "pos": action[:3],
                     "euler": action[3:6],

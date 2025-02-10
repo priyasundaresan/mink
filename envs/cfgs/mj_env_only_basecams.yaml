@@ -1,7 +1,7 @@
 cameras:
   - base1
   - base2
-xml_file: interactive_scripts/stanford_tidybot/scene.xml
+task: cube
 data_folder: dev1
 image_size: 224
 crop_floor: 1
