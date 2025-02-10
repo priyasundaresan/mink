@@ -34,7 +34,6 @@ def eval_hybrid(
 ):
     assert not waypoint_policy.training
     assert not dense_policy.training
-    env_cfg = pyrallis.load(MujocoEnvConfig, open(env_cfg, "r"))
     env = MujocoEnv(env_cfg)
     np.random.seed(seed)
     env.reset()
@@ -57,16 +56,16 @@ def eval_hybrid(
 
         mode = ActMode.Waypoint.value
         while viewer.is_running():
+            assert(mode in [ActMode.Waypoint.value, ActMode.Dense.value, ActMode.Terminate.value])
             if mode == ActMode.Waypoint.value: 
                 mode = run_waypoint_mode(env, waypoint_policy, num_pass, viewer, recorder)
             elif mode == ActMode.Dense.value:
                 mode = run_dense_mode(env, dense_dataset, dense_policy, viewer, recorder)
             elif mode == ActMode.Terminate.value:
-                print('Terminate')
-                if recorder is not None:
-                    recorder.save(f"s{seed}", fps=150)
-                return
-    return 
+                break
+    if recorder is not None:
+        recorder.save(f"s{seed}", fps=150)
+    return env.reward, env.num_step
 
 def run_dense_mode(env, dense_dataset, dense_policy, viewer, recorder):
     cached_actions = []
@@ -100,16 +99,19 @@ def run_dense_mode(env, dense_dataset, dense_policy, viewer, recorder):
             ee_pos, ee_quat, gripper_open, raw_mode = action.split([3, 4, 1, 1])
             ee_quat = ee_quat.detach().cpu().numpy()
             ee_quat /= np.linalg.norm(ee_quat)
-            print(ee_quat)
             ee_pos = ee_pos.detach().cpu().numpy()
 
-            if len(mode_history) == consecutive_modes_required:
+            if env.is_success():
+                mode = ActMode.Terminate.value
+
+            elif len(mode_history) == consecutive_modes_required:
                 if np.all(np.array(mode_history) < WAYPOINT_THRESH):
                     mode = ActMode.Waypoint.value
                 elif np.all(np.array(mode_history) > TERMINATE_THRESH):
                     mode = ActMode.Terminate.value
                 else:
                     mode = ActMode.Dense.value
+
                 mode_history = []
             mode_history.append(raw_mode.item())
 
@@ -134,7 +136,7 @@ def run_dense_mode(env, dense_dataset, dense_policy, viewer, recorder):
 
         step_counter += 1
 
-        if check_for_interrupt():
+        if check_for_interrupt() or env.num_step > env.max_num_step:
             mode = ActMode.Terminate.value
     return mode
 
@@ -172,7 +174,8 @@ def run_waypoint_mode(env, waypoint_policy, num_pass, viewer, recorder):
 
         reached, terminate = env.move_to(pos_cmd, euler_cmd, float(gripper_cmd), viewer, recorder)
         if terminate:
-            mode = ActMode.Dense.value
+            #mode = ActMode.Terminate.value
+            mode = ActMode.Dense.value # HACK, mode pred not working yet
     return mode
 
 def main():
@@ -186,12 +189,14 @@ def main():
     parser.add_argument("--num_pass", type=int, default=3)
     parser.add_argument("--save_dir", type=str, default='rollouts')
     parser.add_argument("--record", type=int, default=1)
-    parser.add_argument("--env_cfg", type=str, default="envs/cfgs/mj_env.yaml")
+    parser.add_argument("--env_cfg", type=str, default="envs/cfgs/open.yaml")
     args = parser.parse_args()
 
     if args.save_dir is not None:
         log_path = os.path.join(args.save_dir, "eval.log")
         sys.stdout = common_utils.Logger(log_path, print_to_stdout=True)
+
+    env_cfg = pyrallis.load(MujocoEnvConfig, open(args.env_cfg, "r"))
 
     print(f">>>>>>>>>>{args.waypoint_model, args.dense_model}<<<<<<<<<<")
     waypoint_policy = load_waypoint(args.waypoint_model, device='cuda')
@@ -208,16 +213,18 @@ def main():
 
     scores = []
     for idx, seed in enumerate(range(args.seed, args.seed + args.num_episode)):
-        eval_hybrid(
+        score, num_step = eval_hybrid(
             waypoint_policy,
             dense_policy,
             dense_dataset,
-            args.env_cfg,
+            env_cfg,
             seed=seed,
             num_pass=args.num_pass,
             save_dir=args.save_dir,
             record=args.record,
         )
+        scores.append(score)
+        print(f"[{idx+1}/{args.num_episode}] avg. score: {np.mean(scores):.4f}, num_steps: {num_step}")
         print(common_utils.wrap_ruler("", max_len=80))
 
 if __name__ == "__main__":

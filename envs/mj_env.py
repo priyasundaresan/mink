@@ -61,7 +61,7 @@ class MujocoEnv:
             self.max_num_step = 900
         elif self.cfg.task == "open":
             xml_file = "interactive_scripts/stanford_tidybot/open.xml"
-            self.max_num_step = 1500
+            self.max_num_step = 1400
 
         self.model = mj.MjModel.from_xml_path(xml_file)
         self.model.vis.map.znear = 0.01
@@ -168,7 +168,7 @@ class MujocoEnv:
         elif self.cfg.task == "open":
             door_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_SENSOR, "rightdoorhinge")
             right_door_angle = self.data.sensordata[door_id]
-            angle_thresh = 0.8
+            angle_thresh = 0.7
             self.reward = right_door_angle > angle_thresh
         return self.reward
 
@@ -231,7 +231,7 @@ class MujocoEnv:
 
             if viewer is not None:
                 viewer.sync()
-                self.rate_limiter.sleep()
+            self.rate_limiter.sleep()
 
         ### Apply gripper action after moving to target pose
         for i in range(40):

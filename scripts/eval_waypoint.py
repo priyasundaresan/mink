@@ -126,7 +126,7 @@ def main():
     parser.add_argument("--num_pass", type=int, default=3)
     parser.add_argument("--save_dir", type=str, default='rollouts')
     parser.add_argument("--record", type=int, default=1)
-    parser.add_argument("--env_cfg", type=str, default="envs/cfgs/mj_env.yaml")
+    parser.add_argument("--env_cfg", type=str, default="envs/cfgs/cube.yaml")
     args = parser.parse_args()
 
     if args.save_dir is not None:
@@ -147,8 +147,8 @@ def main():
         print(f"Eval with original topk_eval {policy.cfg.topk_eval}")
 
     scores = []
-    for seed in range(args.seed, args.seed + args.num_episode):
-        score, _ = eval_waypoint(
+    for idx, seed in enumerate(range(args.seed, args.seed + args.num_episode)):
+        score, num_step = eval_waypoint(
             policy,
             env_cfg,
             seed=seed,
@@ -158,8 +158,7 @@ def main():
         )
 
         scores.append(score)
-        print(f"{args.model}")
-        print(f"score: {np.mean(scores):.4f} topk: {policy.cfg.topk_eval}, npass: {args.num_pass}")
+        print(f"[{idx+1}/{args.num_episode}] avg. score: {np.mean(scores):.4f}, num_steps: {num_step}")
         print(common_utils.wrap_ruler("", max_len=80))
 
 if __name__ == "__main__":
