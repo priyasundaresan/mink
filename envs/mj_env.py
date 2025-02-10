@@ -51,13 +51,17 @@ class MujocoEnvConfig:
 class MujocoEnv:
     def __init__(self, cfg: MujocoEnvConfig):
         self.cfg = cfg
+        self.num_step = 0
+        self.reward = 0
 
         ### Task to XML
         assert self.cfg.task in ["cube", "open"]
         if self.cfg.task == "cube":
             xml_file = "interactive_scripts/stanford_tidybot/cube.xml"
+            self.max_num_step = 900
         elif self.cfg.task == "open":
             xml_file = "interactive_scripts/stanford_tidybot/open.xml"
+            self.max_num_step = 1500
 
         self.model = mj.MjModel.from_xml_path(xml_file)
         self.model.vis.map.znear = 0.01
@@ -160,12 +164,13 @@ class MujocoEnv:
             interactive_body_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_BODY, "interactive_obj")
             cube_pos = self.data.xpos[interactive_body_id]
             z_thresh = 0.10
-            return cube_pos[2] > z_thresh
+            self.reward = cube_pos[2] > z_thresh
         elif self.cfg.task == "open":
             door_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_SENSOR, "rightdoorhinge")
             right_door_angle = self.data.sensordata[door_id]
             angle_thresh = 0.8
-            return right_door_angle > angle_thresh
+            self.reward = right_door_angle > angle_thresh
+        return self.reward
 
     def reset(self):
         ### Reset agent
@@ -220,14 +225,13 @@ class MujocoEnv:
             if reached:
                 break
 
-            if check_for_interrupt():
-                print("Interrupt")
+            if check_for_interrupt() or self.is_success() or self.num_step > self.max_num_step:
                 terminate = True
                 break
 
             if viewer is not None:
                 viewer.sync()
-            self.rate_limiter.sleep()
+                self.rate_limiter.sleep()
 
         ### Apply gripper action after moving to target pose
         for i in range(40):
@@ -271,6 +275,7 @@ class MujocoEnv:
         self.data.ctrl[self.actuator_ids] = self.configuration.q[self.dof_ids]
         self.data.ctrl[self.fingers_actuator_id] = gripper_closed * 255
         mj.mj_step(self.model, self.data)
+        self.num_step += 1
 
     def observe_camera(self, channel_first=False) -> dict[str, np.ndarray]:
         obs = {}

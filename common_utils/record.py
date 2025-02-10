@@ -43,7 +43,6 @@ class Recorder:
         self.combined_frames.append(combined)
 
     def save(self, name, fps=10):
-        print('Saving', len(self.combined_frames))
         path = os.path.join(self.save_dir, f"{name}.mp4")
         # print(f"saving video to {path}")
         # control freq defaults to 0

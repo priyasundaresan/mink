@@ -6,6 +6,7 @@ import spatialmath as sm
 import spatialmath.base as smb
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
+import open3d as o3d
 
 def depth_to_point_cloud(depth_image, K, T) -> np.ndarray:
     # Get image dimensions
@@ -38,7 +39,7 @@ def depth_to_point_cloud(depth_image, K, T) -> np.ndarray:
     points_world = points_world_homog[:3, :].T
     return points_world
 
-def pcl_from_obs(obs, crop=True):
+def pcl_from_obs(obs, crop=True, vis=False):
     merged_points = []
     merged_colors = []
 
@@ -65,6 +66,18 @@ def pcl_from_obs(obs, crop=True):
 
     merged_points = np.vstack(merged_points)
     merged_colors = np.vstack(merged_colors)
+
+    if vis:
+        # Create an Open3D PointCloud object
+        point_cloud = o3d.geometry.PointCloud()
+        
+        # Assign points and colors
+        point_cloud.points = o3d.utility.Vector3dVector(merged_points)  # Nx3 array of 3D points
+        point_cloud.colors = o3d.utility.Vector3dVector(merged_colors)  # Nx3 array of RGB values
+        
+        # Visualize the point cloud
+        o3d.visualization.draw_geometries([point_cloud])
+
     return merged_points, merged_colors
 
 def make_tf(
