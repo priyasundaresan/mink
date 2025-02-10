@@ -7,19 +7,17 @@ import cv2
 from envs.mj_utils.camera_utils import *
 
 class Camera:
-    def __init__(self, model, data, cam_name: str = "", save_dir="data/img/"):
+    def __init__(self, model, data, cam_name: str = ""):
         """Initialize Camera instance.
 
         Args:
         - model: Mujoco model.
         - data: Mujoco data.
         - cam_name: Name of the camera.
-        - save_dir: Directory to save captured images.
         """
         self._cam_name = cam_name
         self._model = model
         self._data = data
-        self._save_dir = save_dir + self._cam_name + "/"
 
         # Retrieve camera ID
         self._cam_id = self._data.cam(self._cam_name).id
@@ -36,9 +34,6 @@ class Camera:
         self._image = np.zeros((self._height, self._width, 3), dtype=np.uint8)
         self._depth_image = np.zeros((self._height, self._width, 1), dtype=np.float32)
         self._point_cloud = np.zeros((self._height, self._width, 1), dtype=np.float32)
-
-        if not os.path.exists(self._save_dir):
-            os.makedirs(self._save_dir)
 
     @property
     def height(self) -> int:
@@ -59,16 +54,6 @@ class Camera:
                 int: The width of the camera.
         """
         return self._width
-
-    @property
-    def save_dir(self) -> str:
-        """
-        Get the directory where images captured by the camera are saved.
-
-        Returns:
-                str: The directory where images captured by the camera are saved.
-        """
-        return self._save_dir
 
     @property
     def name(self) -> str:
@@ -149,12 +134,6 @@ class Camera:
         return self._image, self._depth_image
 
     @property
-    def point_cloud_cam(self) -> np.ndarray:
-        """Return the captured point cloud."""
-        self._point_cloud_cam = self._depth_to_point_cloud(self.depth_image)
-        return self._point_cloud_cam
-
-    @property
     def fov(self) -> float:
         """Get the field of view (FOV) of the camera.
 
@@ -216,51 +195,3 @@ class Camera:
         points_camera = points_camera[:, :3] / points_camera[:, 3][:, np.newaxis]
 
         return points_camera
-
-    def shoot(self, autosave: bool = True) -> None:
-        """
-        Captures a new rgb image, depth image and point cloud from the camera.
-        Args:
-        - autosave: If the camera rgb image, depth image and point cloud should be saved.
-
-        Returns:
-        - None.
-        """
-        self._image = self.image
-        self._depth_image = self.depth_image
-        self._point_cloud_cam = self.point_cloud_cam
-        self._point_cloud = self.point_cloud
-        self._seg_image = self.seg_image
-        if autosave:
-            self.save()
-
-    def save(self, img_name: str = "") -> None:
-        """Saves the captured image and depth information.
-
-        Args:
-        - img_name: Name for the saved image file.
-        """
-        print(f"saving rgb image, depth image and point cloud to {self.save_dir}")
-
-        if img_name == "":
-            timestamp = datetime.now()
-            cv2.imwrite(
-                self._save_dir + f"{timestamp}_rgb.png",
-                cv2.cvtColor(self.image, cv2.COLOR_RGB2BGR),
-            )
-            cv2.imwrite(self._save_dir + f"{timestamp}_seg.png", self.seg_image)
-            np.save(self._save_dir + f"{timestamp}_depth.npy", self.depth_image)
-            pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(self.point_cloud)
-            o3d.io.write_point_cloud(self._save_dir + f"{timestamp}.pcd", pcd)
-
-        else:
-            cv2.imwrite(
-                self._save_dir + f"{img_name}_rgb.png",
-                cv2.cvtColor(self.image, cv2.COLOR_RGB2BGR),
-            )
-            cv2.imwrite(self._save_dir + f"{img_name}_seg.png", self.seg_image)
-            np.save(self._save_dir + f"{img_name}_depth.npy", self.depth_image)
-            pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(self.point_cloud)
-            o3d.io.write_point_cloud(self._save_dir + f"{image_name}.pcd", pcd)
