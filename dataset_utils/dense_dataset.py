@@ -48,6 +48,7 @@ class DenseDatasetConfig:
     path: str = ""
     camera_views: str = "wrist_view"
     image_size: int = 96
+    use_interpolate: int = 0
     predict_mode: int = 1
     num_data: int = -1
 
@@ -114,8 +115,12 @@ class DenseDataset:
             raw_episode = np.load(f, allow_pickle=True)["arr_0"]
             episode = []
             for t, timestep in enumerate(raw_episode):
-                if timestep["mode"] != ActMode.Dense:
-                    continue
+                if self.cfg.use_interpolate:
+                    if timestep["mode"] == ActMode.Waypoint: # Use dense and interpolation data
+                        continue
+                else:
+                    if timestep["mode"] != ActMode.Dense: # Use only strictly dense data
+                        continue
 
                 # The action consists of: 3 dims for pos, 3 for rot, 1 for gripper, 1 for mode (Waypoint/Dense/Terminate)
                 if self.cfg.predict_mode:

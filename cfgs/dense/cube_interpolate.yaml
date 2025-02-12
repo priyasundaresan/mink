@@ -1,6 +1,7 @@
 dataset:
-  path: data/cabinet
+  path: data/cube
   camera_views: wrist_image
+  use_interpolate: 1
   predict_mode: 1
 dp:
   shift_pad: 6
@@ -18,4 +19,4 @@ weight_decay: 1e-6
 cosine_schedule: 1
 lr_warm_up_steps: 500
 use_wb: 1
-save_dir: exps/dense/cabinet
+save_dir: exps/dense/cube_interpolate
