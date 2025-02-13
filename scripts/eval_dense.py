@@ -60,6 +60,7 @@ def eval_dense(
     with context:
 
         while env.num_step < env.max_num_step:
+     
             if step_counter % image_capture_interval == 0:
                 obs = env.observe()
         

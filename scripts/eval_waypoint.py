@@ -51,6 +51,9 @@ def eval_waypoint(
 
     with context:
         while not terminate and env.num_step < env.max_num_step:
+            if headless:
+                mj.mj_forward(env.model, env.data)
+
             obs = env.observe()
             recorder.add_numpy(obs, ["viewer_image"])
 
