@@ -26,14 +26,13 @@ Then, source `set_env.sh` to activate the `tidybot` conda env and set the `PYTHO
 source set_env.sh
 ```
 
-## Data Collection for Mobile-SPHINX
+## Teleop for Mobile-SPHINX
 Remember to run `source set_env.sh`  once per shell before running any script from this repo.
-We collect data for training Mobile-SPHINX policies using Jimmy Wu's iPhone teleop interface to control TidyBot (along with a Whole Body Controller written using Kevin Zakka's `mink` library). I usually do this locally on my Mac:
+If you just want to test out whole-body teleoperation using the iPhone as the teleoperation device, you can use:
 ```shell
 source set_env.sh
-mjpython interactive_scripts/record_sim.py
+mjpython interactive_scripts/teleop_phone.py
 ```
-
 This will print out something like `Starting server at 10.30.163.179:5001`. Next, make sure your iPhone is connected to the same Wi-Fi network as your laptop, and that the app XRBrowser is installed. Open XRBrowser, and go to the IP address printed out by the script. You can then use your iPhone to teleoperate the robot. A few quick notes:
 * Make sure your iPhone has Portrait Lock Orientaton ON, and start with top of phone facing up (towards your face) not forward (towards your toes).
 * Click `Start episode` to start data collection, similarly `End episode` to finish an episode.
@@ -41,27 +40,62 @@ This will print out something like `Starting server at 10.30.163.179:5001`. Next
 * Swipe up/down to open/close the gripper. NOTE: the simulated gripper is currently a bit finicky.
 * You'll definitely want to practice before collecting any useful datasets! :)
 
-If you just want to test out teleoperation using the iPhone (without recording any data), you can use:
-```shell
-source set_env.sh
-mjpython interactive_scripts/teleop_phone.py
-```
-Same instructions as above for connecting your iPhone and teleoperating.
-
-To just test out the whole body controller, you can use the following script to control the robot using only mouse click & drag actions:
+To test whole-body teleop using simple mouse click-drag interactions, you can use the following script:
 ```shell
 source set_env.sh
 mjpython interactive_scripts/teleop_mouse.py
 ```
-You will see a little red interaction cube at the end effector appear.
+You will see a little red interaction cube appear at the end effector.
 You can `Double Click` to select it, then use `Ctrl + Right Click and Drag` to move it positionally, and `Ctrl + Left Click and Drag` to control orientation.
 
+## Data Collection for Mobile-SPHINX
+Remember to run `source set_env.sh`  once per shell before running any script from this repo.
+
+### Step 1: Collecting Teleoperated Data
+Run the following script:
+```shell
+source set_env.sh
+mjpython interactive_scripts/record_sim.py -env_cfg envs/cfgs/cube.yaml
+```
+Open XRBrowser, and go to the IP address printed out by the script, and hit `Start episode.` Wait for the simulator window to load, then begin teleoperation. Once done, you can click `End episode.` After you see `Done saving` in Terminal, you can click `Reset` to begin the next episode. In general, wait for the simulator to load before teleoperating, and if the robot is not responsive to your iPhone actions, just try refreshing the page. 
+
+Each teleoperated episode will be saved as an `npz` to `dev1` as follows:
+```
+dev1/
+└── demo00000.npz
+└── demo00001.npz
+...
+
+```
+I collected 20 demos to train the cube task. Note that episodes with length 0 are automatically discarded while the script runs (in case you accidentally click `End episode` instead of `Start`, etc.), but if you do mess up a demo after starting an episode and click `End episode`, you will need to manually delete the last recorded `npz` file. Every time you run the script `record_sim.py`, it will start saving from the last recorded demo index if there is one (i.e. if you just recorded `demo00004.npz` and quit, then re-run, it will save from `demo00005.npz`).
+
+### Step 2: Post-Processing: Labeling Modes
+Once happy with the demos recorded in `dev1`, we need to post-process them into a SPHINX-compatible format (e.g., with mode labels and salient point annotations).
+The first step is to break up each demo temporally into `waypoint` and `dense` modes (currently they are all `dense`).
+
+Run the following script, which will load each demo in `dev1`, visualize it, and allow you to temporally annotate modes.
+```shell
+python dataset_utils/annotate_modes.py
+```
+Go to `http://127.0.0.1:5000` in your browser. This script starts with visualizing `demo00000.npz.` You can use the blue circular cursor to scroll through the frames of the video, and `Shift+Click` to specify a waypoint at that frame. You can use `Delete` if you mess up. Specifying waypoints is a bit subjective, but try to use a consistent strategy and number of waypoints across demos. For cube, I typically use the strategy of using 3 waypoints: one at the frame where the gripper will 'approach' the cube, one to 'grasp', and one frame towards the very end of the demo (to 'lift'). When you're happy labeling that demo, then go to Terminal and press `Enter.` Refresh the page to load the next demo. If the script for some reason crashes/hangs, interrupt, and go back to the URL & refresh. It should load the most recent un-annotated demo.
+
+After this step, you will have a new folder `dev1_relabeled` which contains all the demos, now annotated with modes.
+
+### Step 3: Post-Processing: Labeling Salient Points
+The purpose of the above was to temporally relabel demos into dense/waypoint modes. The last step is to label salient points for the extracted waypoint observations above.
+Run:
+```shell
+python dataset_utils/annotate_salient_points.py
+```
+This will load and visualize the point cloud of each extracted waypoint timestep from the demos in `dev1_relabeled`. You can also drag the point cloud around with just `Click` interactions and zoom in using the trackpad to get a better view of where you want to put a salient point. Now, just simply `Shift+Click` wherever you want to label the salient point (a colored sphere will appear there), and then press `q` or `Esc` to go to the next obs. You can re-click if you mess up, just note that only the last click will be recorded. 
+
+After this step, `dev1_relabeled` contains all the demos, now annotated with both modes and salient points! Rename this folder to whatever you want and put it in `data.` See below for how to train and evaluate the policy on the task for which you just collected data.
 
 ## Training Mobile-SPHINX
 
 ### Download data
 
-Create a new `data` folder, download the data from [here](https://drive.google.com/drive/folders/1rzkMgkKm2slidJ2iLmBpVReOenwWI-uq?usp=sharing), and move it into `data` (NOTE, it is also available on `sc` cluster node: `/iliad/u/priyasun/mink/data`).
+Create a new `data` folder, download the data from [here](https://drive.google.com/drive/folders/1rzkMgkKm2slidJ2iLmBpVReOenwWI-uq?usp=sharing), and move it into `data` (NOTE, it is also available on `sc` cluster node: `/iliad/u/priyasun/mink/data`). See above instructions if you want to collect your own dataset.
 
 ### Training (on the cluster)
 
