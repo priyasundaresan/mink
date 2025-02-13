@@ -135,11 +135,17 @@ python dataset_utils/annotate_modes.py
 After this step, you will have a new folder `dev1_relabeled` which contains all the demos, now annotated with modes.
 
 ### Step 3: Post-Processing: Labeling Salient Points
-The purpose of the above was to temporally relabel demos into dense/waypoint modes. The last step is to label salient points for the extracted waypoint observations above.
+The purpose of the above was to temporally relabel demos into dense/waypoint modes.
+The last step is to label salient points for the extracted waypoint observations above.
 Run:
 ```shell
 python dataset_utils/annotate_salient_points.py
 ```
-This will load and visualize the point cloud of each extracted waypoint timestep from the demos in `dev1_relabeled`. You can also drag the point cloud around with just `Click` interactions and zoom in using the trackpad to get a better view of where you want to put a salient point. Now, just simply `Shift+Click` wherever you want to label the salient point (a colored sphere will appear there), and then press `q` or `Esc` to go to the next obs. You can re-click if you mess up, just note that only the last click will be recorded. 
+* In the window that appears, you will see the point cloud of the first extracted waypoint timestep from the first demo in `dev1_relabeled`
+  * You can drag the point cloud around with just `Click` interactions and zoom in using the trackpad to get a better view of where you want to put a salient point
+* `Shift+Click` to label a salient point (a colored sphere will appear)
+  * You can re-click if you mess up, just note that only the last click will be recorded.
+* Press `q` or `Esc` to go to the next obs.  
 
-After this step, `dev1_relabeled` contains all the demos, now annotated with both modes and salient points! Rename this folder to whatever you want and put it in `data.` See above for how to train and evaluate the policy on the task for which you just collected data.
+After this step, `dev1_relabeled` contains all the demos, now annotated with both modes and salient points!
+Rename this folder to whatever you want and put it in `data.` See above for how to train/eval the policy on the task for which you just collected data.
