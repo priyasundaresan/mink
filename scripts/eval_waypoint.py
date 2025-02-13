@@ -12,6 +12,7 @@ from models.waypoint_transformer import WaypointTransformer
 from scipy.spatial.transform import Rotation as R
 import common_utils
 import open3d as o3d
+from contextlib import nullcontext
 
 def eval_waypoint(
     policy: WaypointTransformer,
@@ -20,6 +21,7 @@ def eval_waypoint(
     num_pass: int,
     save_dir,
     record: bool,
+    headless: bool,
 ):
     assert not policy.training
     env = MujocoEnv(env_cfg)
@@ -34,14 +36,21 @@ def eval_waypoint(
     reached = True
     terminate = False
 
-    with mj.viewer.launch_passive(
-        model=env.model,
-        data=env.data,
-        show_left_ui=False,
-        show_right_ui=False,
-    ) as viewer:
+    if headless:
+        context = nullcontext()
+        viewer = None
+        os.environ["MUJOCO_GL"] = "egl"
+    else:
+        viewer = context = mj.viewer.launch_passive(
+         model=env.model,
+         data=env.data,
+         show_left_ui=False,
+         show_right_ui=False,
+        )
         mj.mjv_defaultFreeCamera(env.model, viewer.cam)
-        while viewer.is_running() and not terminate:
+
+    with context:
+        while not terminate and env.num_step < env.max_num_step:
             obs = env.observe()
             recorder.add_numpy(obs, ["viewer_image"])
 
@@ -65,8 +74,10 @@ def eval_waypoint(
                         euler_cmd = R.from_quat(rot_cmd).as_euler('xyz')
 
             reached, terminate = env.move_to(pos_cmd, euler_cmd, float(gripper_cmd), viewer, recorder)
+
     if recorder is not None:
         recorder.save(f"s{seed}", fps=150)
+
     return env.reward, env.num_step
 
 def _eval_waypoint_multi_episode(
@@ -127,6 +138,7 @@ def main():
     parser.add_argument("--save_dir", type=str, default='rollouts')
     parser.add_argument("--record", type=int, default=1)
     parser.add_argument("--env_cfg", type=str, default="envs/cfgs/cube.yaml")
+    parser.add_argument("--headless", action='store_true')
     args = parser.parse_args()
 
     if args.save_dir is not None:
@@ -155,6 +167,7 @@ def main():
             num_pass=args.num_pass,
             save_dir=args.save_dir,
             record=args.record,
+            headless=args.headless,
         )
 
         scores.append(score)
@@ -162,5 +175,5 @@ def main():
         print(common_utils.wrap_ruler("", max_len=80))
 
 if __name__ == "__main__":
-    # python scripts/eval_waypoint.py --model exps/waypoint/cube/ema.pt --env_cfg envs/cfgs/cube.yaml
+    # python scripts/eval_waypoint.py --model exps/waypoint/cube/ema.pt --env_cfg envs/cfgs/cube.yaml --headless
     main()
