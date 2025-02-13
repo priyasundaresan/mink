@@ -21,7 +21,7 @@ from scripts.train_dense import load_model
 from common_utils.eval_utils import (
     check_for_interrupt,
 )
-from pyvirtualdisplay import Display
+from contextlib import nullcontext
 
 def eval_hybrid(
     waypoint_policy,
@@ -32,6 +32,7 @@ def eval_hybrid(
     num_pass,
     save_dir,
     record,
+    headless,
 ):
     assert not waypoint_policy.training
     assert not dense_policy.training
@@ -44,19 +45,25 @@ def eval_hybrid(
         assert save_dir is not None
         recorder = common_utils.Recorder(save_dir)
 
-    with mj.viewer.launch_passive(
-        model=env.model,
-        data=env.data,
-        show_left_ui=False,
-        show_right_ui=False,
-    ) as viewer:
+    if headless:
+        context = nullcontext()
+        viewer = None
+        os.environ["MUJOCO_GL"] = "egl"
+    else:
+        viewer = context = mj.viewer.launch_passive(
+         model=env.model,
+         data=env.data,
+         show_left_ui=False,
+         show_right_ui=False,
+        )
+        mj.mjv_defaultFreeCamera(env.model, viewer.cam)
+
+    with context:
     
         reached = True
         mode = ActMode.Waypoint.value
-        mj.mjv_defaultFreeCamera(env.model, viewer.cam)
 
-        mode = ActMode.Waypoint.value
-        while viewer.is_running():
+        while env.num_step < env.max_num_step:
             assert(mode in [ActMode.Waypoint.value, ActMode.Dense.value, ActMode.Terminate.value])
             if mode == ActMode.Waypoint.value: 
                 mode = run_waypoint_mode(env, waypoint_policy, num_pass, viewer, recorder)
@@ -64,8 +71,10 @@ def eval_hybrid(
                 mode = run_dense_mode(env, dense_dataset, dense_policy, viewer, recorder)
             elif mode == ActMode.Terminate.value:
                 break
+
     if recorder is not None:
         recorder.save(f"s{seed}", fps=150)
+
     return env.reward, env.num_step
 
 def run_dense_mode(env, dense_dataset, dense_policy, viewer, recorder):
@@ -146,8 +155,11 @@ def run_waypoint_mode(env, waypoint_policy, num_pass, viewer, recorder):
     mode = ActMode.Waypoint.value
     reached = True
     while mode == ActMode.Waypoint.value:
+        if viewer is None:
+            mj.mj_forward(env.model, env.data)
         obs = env.observe()
-        recorder.add_numpy(obs, ["viewer_image"])
+        if recorder is not None:
+            recorder.add_numpy(obs, ["viewer_image"])
 
         points, colors = pcl_from_obs(obs)
         point_cloud = o3d.geometry.PointCloud()
@@ -191,6 +203,7 @@ def main():
     parser.add_argument("--save_dir", type=str, default='rollouts')
     parser.add_argument("--record", type=int, default=1)
     parser.add_argument("--env_cfg", type=str, default="envs/cfgs/open.yaml")
+    parser.add_argument("--headless", action='store_true')
     args = parser.parse_args()
 
     if args.save_dir is not None:
@@ -223,12 +236,20 @@ def main():
             num_pass=args.num_pass,
             save_dir=args.save_dir,
             record=args.record,
+            headless=args.headless,
         )
         scores.append(score)
-        print(f"[{idx+1}/{args.num_episode}] avg. score: {np.mean(scores):.4f}, num_steps: {num_step}")
+        print(f"[{idx+1}/{args.num_episode}] avg. score: {np.mean(scores):.4f}, episode_length: {num_step}")
         print(common_utils.wrap_ruler("", max_len=80))
 
 if __name__ == "__main__":
+    ### Example commands
+    ## Locally, on a workstation with a display
     # python scripts/eval_hybrid.py -w exps/waypoint/cabinet/ema.pt -d exps/dense/cabinet/latest.pt
-    Display().start()
+
+    ## Headless mode (i.e. on the cluster)
+    # MUJOCO_GL=egl python scripts/eval_hybrid.py -w exps/waypoint/cabinet/ema.pt -d exps/dense/cabinet/latest.pt --headless
+
+    # NOTE: Pass --record 0 for faster rollouts (but no videos saved)
+    ###
     main()

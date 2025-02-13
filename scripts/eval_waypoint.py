@@ -39,7 +39,6 @@ def eval_waypoint(
     if headless:
         context = nullcontext()
         viewer = None
-        os.environ["MUJOCO_GL"] = "egl"
     else:
         viewer = context = mj.viewer.launch_passive(
          model=env.model,
@@ -48,6 +47,7 @@ def eval_waypoint(
          show_right_ui=False,
         )
         mj.mjv_defaultFreeCamera(env.model, viewer.cam)
+
 
     with context:
         while not terminate and env.num_step < env.max_num_step:
@@ -174,9 +174,19 @@ def main():
         )
 
         scores.append(score)
-        print(f"[{idx+1}/{args.num_episode}] avg. score: {np.mean(scores):.4f}, num_steps: {num_step}")
+        print(f"[{idx+1}/{args.num_episode}] avg. score: {np.mean(scores):.4f}, episode_length: {num_step}")
         print(common_utils.wrap_ruler("", max_len=80))
 
 if __name__ == "__main__":
-    # python scripts/eval_waypoint.py --model exps/waypoint/cube/ema.pt --env_cfg envs/cfgs/cube.yaml --headless
+    ### Example commands
+
+    ## Locally, on a workstation with a display
+    # python scripts/eval_waypoint.py --model exps/waypoint/cube/ema.pt --env_cfg envs/cfgs/cube.yaml 
+
+    ## Headless mode (i.e. on the cluster)
+    # MUJOCO_GL=egl python scripts/eval_waypoint.py --model exps/waypoint/cube/ema.pt --env_cfg envs/cfgs/cube.yaml --headless 
+
+    # NOTE: Pass --record 0 for faster rollouts (but no videos saved)
+    ###
+
     main()

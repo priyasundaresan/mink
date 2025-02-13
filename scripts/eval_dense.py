@@ -150,13 +150,20 @@ def main():
             headless=args.headless
         )
         scores.append(score)
-        print(f"[{idx+1}/{args.num_episode}] avg. score: {np.mean(scores):.4f}, num_steps: {num_step}")
+        print(f"[{idx+1}/{args.num_episode}] avg. score: {np.mean(scores):.4f}, episode_length: {num_step}")
         print(common_utils.wrap_ruler("", max_len=80))
 
 if __name__ == "__main__":
     ### Example Usage
+    ## Locally, on a workstation with a display
     # python scripts/eval_dense.py -d exps/dense/cabinet_interpolate/latest.pt -e envs/cfgs/open.yaml
     # python scripts/eval_dense.py -d exps/dense/cube_interpolate/latest.pt -e envs/cfgs/cube.yaml 
-    # python scripts/eval_dense.py -d exps/dense/cube_interpolate/latest.pt -e envs/cfgs/cube.yaml --headless
+
+    ## Headless mode (i.e. on the cluster)
+    # MUJOCO_GL=egl python scripts/eval_dense.py -d exps/dense/cube_interpolate/latest.pt -e envs/cfgs/cube.yaml --headless
+    # MUJOCO_GL=egl python scripts/eval_dense.py -d exps/dense/cabinet_interpolate/latest.pt -e envs/cfgs/open.yaml --headless
+
+    # NOTE: Pass --record 0 for faster rollouts (but no videos saved)
     ###
+
     main()

@@ -62,7 +62,7 @@ def pcl_from_obs(obs, crop=True, vis=False):
 
         merged_points.append(points)
         merged_colors.append(colors)
-        break
+        break # FIXME
 
     merged_points = np.vstack(merged_points)
     merged_colors = np.vstack(merged_colors)
