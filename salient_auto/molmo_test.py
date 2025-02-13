@@ -1,17 +1,21 @@
-from molmo import MolmoObjectLocator
+from molmo import MolmoModel
 
-# Initialize the API client
-locator = MolmoObjectLocator()
+# Set model path
+MODEL_PATH = "../Molmo-7B-O-0924"
 
-# Specify image path and object name
-image_path = "/Users/rheamalhotra/Desktop/teapot.jpg"
-object_name = "teapot"
+# Initialize the model
+molmo = MolmoModel(MODEL_PATH)
 
-# Get coordinates
-coordinates = locator.get_coordinates(image_path, object_name)
+# Set test inputs
+image_path = "teapot.jpg"
+item="teapot"
+text_prompt = "Point to the " + item
 
-# Print result
-if coordinates:
-    print(f"Extracted Coordinates: x={coordinates[0]}, y={coordinates[1]}")
+# Run model and print output
+output_text = molmo.generate_response(image_path, text_prompt)
+print("\n🔹 Molmo Output:", output_text)
+coords = molmo.parse_coordinates(output_text)
+if coords is not None:
+    print(f"Parsed Coordinates: x = {coords[0]}, y = {coords[1]}")
 else:
-    print("Could not extract coordinates from the response.")
+    print("No coordinates found in the output.")
