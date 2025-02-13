@@ -21,6 +21,7 @@ from scripts.train_dense import load_model
 from common_utils.eval_utils import (
     check_for_interrupt,
 )
+from pyvirtualdisplay import Display
 
 def eval_hybrid(
     waypoint_policy,
@@ -229,4 +230,5 @@ def main():
 
 if __name__ == "__main__":
     # python scripts/eval_hybrid.py -w exps/waypoint/cabinet/ema.pt -d exps/dense/cabinet/latest.pt
+    Display().start()
     main()
