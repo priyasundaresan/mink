@@ -48,7 +48,7 @@ mjpython interactive_scripts/teleop_mouse.py
 You will see a little red interaction cube appear at the end effector.
 You can `Double Click` to select it, then use `Ctrl + Right Click and Drag` to move it positionally, and `Ctrl + Left Click and Drag` to control orientation.
 
-## Training Mobile-SPHINX
+## Training/Evaluating Mobile-SPHINX
 
 ### Download data
 
@@ -87,7 +87,7 @@ This will by default run 20 rollouts and save videos to the folder `rollouts`. F
 Note:
 `--record 0` will run the rollouts without saving videos (faster if you don't care about visualizing)
 
-## Collectin Data for Mobile-SPHINX
+## Collecting Data for Mobile-SPHINX
 Remember to run `source set_env.sh`  once per shell before running any script from this repo.
 This part walks through how to collect data for a task from scratch. You can use this general workflow to collect data for & train other custom tasks.
 
