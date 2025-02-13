@@ -182,7 +182,6 @@ def _process_episodes(fns: list[str], radius: float, aug_interpolate: float):
             datas.append(processed_data)
             max_num_points = max(max_num_points, points.shape[0])
 
-            print(mode, target_mode)
 
         episodes.append(episode)
     return datas, episodes, max_num_points
@@ -365,13 +364,13 @@ class PointCloudDataset(Dataset):
 
 def main():
     cfg = PointCloudDatasetConfig(
-        path="data/cabinet",
+        path="data/cube",
         is_real=0,
         aug_interpolate=0,
         aug_translate=0,
         aug_rotate=0,
         use_dist=1,
-        fps=1,
+        fps=0,
     )
     dataset = PointCloudDataset(cfg, use_euler=False, npoints=1024, split="all")
     d = dataset[0]
@@ -381,7 +380,7 @@ def main():
     print("#positive:", user_clicked_labels[indices].size())
     print("click labels:", user_clicked_labels[indices])
     print("click labels max:", user_clicked_labels[indices].max())
-    #dataset.save_vis("vis_dev", render_gripper=False)
+    dataset.save_vis("vis_dev", render_gripper=False)
 
 if __name__ == "__main__":
     main()

@@ -115,7 +115,7 @@ if __name__ == '__main__':
     print('Go to http://127.0.0.1:5000')
     
     for fn in sorted(os.listdir(demo_dir)):
-        if 'npz' in fn:
+        if 'npz' in fn and not fn in os.listdir('dev1_relabeled'):
             episode_fn = os.path.join(demo_dir, fn)
             print('Annotating:', episode_fn)
             demo = load_demo(episode_fn)
