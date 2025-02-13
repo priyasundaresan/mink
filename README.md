@@ -75,35 +75,6 @@ python scripts/train_waypoint.py --config_path cfgs/waypoint/cabinet.yaml
 Use `--save_dir PATH` to specify where to store the logs and models.
 Use `--use_wb 0` to disable logging to W&B (this is useful when debugging, to avoid saving unnecessary logs).
 
-Here is a sample `sbatch` script I use to train these policies on the cluster:
-`sbatch run.sh`, where `run.sh` contains
-```shell
-#!/bin/bash
-
-#SBATCH --account=iliad
-#SBATCH --partition=iliad
-#SBATCH --time=24:00:00
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=96G
-#SBATCH --gres=gpu:l40s:1
-#SBATCH --output=%A.out
-#SBATCH --error=%A.err
-#SBATCH --job-name="mobilesphinx_cube"
-#SBATCH --nodelist="iliad8"
-
-echo "SLURM_JOBID="$SLURM_JOBID
-echo "SLURM_JOB_NODELIST"=$SLURM_JOB_NODELIST
-echo "SLURM_NNODES"=$SLURM_NNODES
-echo "SLURMTMPDIR="$SLURMTMPDIR
-echo "working directory = "$SLURM_SUBMIT_DIR
-
-source /iliad/u/priyasun/miniconda3/bin/activate
-cd /iliad/u/priyasun/tidybot
-source set_env.sh
-python scripts/train_waypoint.py --config cfgs/waypoint/cube.yaml
-wait
-```
-
 ### Evaluation (local, on a workstation)
 Assuming the resulting checkpoints are saved to `exps/waypoint/cube`, to eval the waypoint policy, you can run the following.
 If you have access to a workstation (with GPU and display), run:
@@ -129,7 +100,11 @@ Run the following:
 source set_env.sh
 mjpython interactive_scripts/record_sim.py -env_cfg envs/cfgs/cube.yaml
 ```
-Open XRBrowser, and go to the IP address printed out by the script, and hit `Start episode.` Wait for the simulator window to load, then begin teleoperation. Once done, you can click `End episode.` After you see `Done saving` in Terminal, you can click `Reset` to begin the next episode. In general, wait for the simulator to load before teleoperating, and if the robot is not responsive to your iPhone actions, just try refreshing the page. 
+* Open XRBrowser, and go to the IP address printed out by the script, and hit `Start episode.`
+* Wait for the simulator window to load, then begin teleoperation.
+* Once done, you can click `End episode.`
+* After you see `Done saving` in Terminal, you can click `Reset` to begin the next episode.
+* In general, wait for the simulator to load before teleoperating, and if the robot is not responsive to your iPhone actions, just try refreshing the page. 
 
 Each teleoperated episode will be saved as an `npz` to `dev1` as follows:
 ```
@@ -139,17 +114,23 @@ dev1/
 ...
 
 ```
-I collected 20 demos to train the cube task. Note that episodes with length 0 are automatically discarded while the script runs (in case you accidentally click `End episode` instead of `Start`, etc.), but if you do mess up a demo after starting an episode and click `End episode`, you will need to manually delete the last recorded `npz` file. Every time you run the script `record_sim.py`, it will start saving from the last recorded demo index if there is one (i.e. if you just recorded `demo00004.npz` and quit, then re-run, it will save from `demo00005.npz`).
+NOTE: If you do mess up a demo after starting an episode and click `End episode`, you will need to manually delete the last recorded `npz` file. Every time you run the script `record_sim.py`, it will start saving from the last recorded demo index if there is one (i.e. if you just recorded `demo00004.npz` and quit, then re-run, it will save from `demo00005.npz`).
 
 ### Step 2: Post-Processing: Labeling Modes
 Once happy with the demos recorded in `dev1`, we need to post-process them into a SPHINX-compatible format (e.g., with mode labels and salient point annotations).
-The first step is to break up each demo temporally into `waypoint` and `dense` modes (currently they are all `dense`).
+The first step is to break up each demo temporally into `waypoint` and `dense` modes.
 
 Run the following script, which will load each demo in `dev1`, visualize it, and allow you to temporally annotate modes.
 ```shell
 python dataset_utils/annotate_modes.py
 ```
-Go to `http://127.0.0.1:5000` in your browser. This script starts with visualizing `demo00000.npz.` Use the blue circular cursor to scroll through the frames of the video, and `Shift+Click` to specify a waypoint at that frame. You can use `Delete` if you mess up. Specifying waypoints is a bit subjective, but try to use a consistent strategy and number of waypoints across demos. For cube, I typically use the strategy of using 3 waypoints: one at the frame where the gripper 'approaches' the cube, one when it 'grasps', and one frame towards the very end of the demo (to 'lift'). When you're happy labeling that demo, then go to Terminal and press `Enter.` Refresh the page to load the next demo. If the script for some reason crashes/hangs, interrupt it, re-run, and go back to the URL & refresh. It should load the most recent un-annotated demo.
+* Go to `http://127.0.0.1:5000` in your browser.
+* Use the blue circular cursor to scroll through the frames of the first demo, and `Shift+Click` to specify a waypoint at that frame.
+  * `Delete` will remove the last waypoint (if you mess up)
+  * Try to use a consistent strategy and number of waypoints across demos. For `cube`, I typically use 3 waypoints: one at the frame where the gripper 'approaches' the cube, one when it 'grasps', and one frame towards the very end of the demo (to 'lift').
+* When you're happy labeling that demo, then go to Terminal and press `Enter.`
+* Refresh the page to load the next demo.
+* If the script for some reason crashes/hangs, interrupt it, re-run, and go back to the URL & refresh. It should load the most recent un-annotated demo.
 
 After this step, you will have a new folder `dev1_relabeled` which contains all the demos, now annotated with modes.
 
