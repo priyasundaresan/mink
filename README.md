@@ -54,6 +54,9 @@ You can `Double Click` to select it, then use `Ctrl + Right Click and Drag` to m
 
 Create a new `data` folder, download the data from [here](https://drive.google.com/drive/folders/1rzkMgkKm2slidJ2iLmBpVReOenwWI-uq?usp=sharing), and move it into `data` (NOTE, it is also available on `sc` cluster node: `/iliad/u/priyasun/mink/data`). See above instructions if you want to collect your own dataset.
 
+### Inspect the datasets
+You can run `python dataset_utils/waypoint_dataset.py` to load the cube dataset, and save some visualizations.
+
 ### Training (on the cluster)
 
 To train Mobile-SPHINX, run the following (training logs and eval success rates will be logged to Weights & Biases).
@@ -71,6 +74,35 @@ python scripts/train_waypoint.py --config_path cfgs/waypoint/cabinet.yaml
 
 Use `--save_dir PATH` to specify where to store the logs and models.
 Use `--use_wb 0` to disable logging to W&B (this is useful when debugging, to avoid saving unnecessary logs).
+
+Here is a sample `sbatch` script I use to train these policies on the cluster:
+`sbatch run.sh`, where `run.sh` contains
+```shell
+#!/bin/bash
+
+#SBATCH --account=iliad
+#SBATCH --partition=iliad
+#SBATCH --time=24:00:00
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=96G
+#SBATCH --gres=gpu:l40s:1
+#SBATCH --output=%A.out
+#SBATCH --error=%A.err
+#SBATCH --job-name="mobilesphinx_cube"
+#SBATCH --nodelist="iliad8"
+
+echo "SLURM_JOBID="$SLURM_JOBID
+echo "SLURM_JOB_NODELIST"=$SLURM_JOB_NODELIST
+echo "SLURM_NNODES"=$SLURM_NNODES
+echo "SLURMTMPDIR="$SLURMTMPDIR
+echo "working directory = "$SLURM_SUBMIT_DIR
+
+source /iliad/u/priyasun/miniconda3/bin/activate
+cd /iliad/u/priyasun/tidybot
+source set_env.sh
+python scripts/train_waypoint.py --config cfgs/waypoint/cube.yaml
+wait
+```
 
 ### Evaluation (local, on a workstation)
 Assuming the resulting checkpoints are saved to `exps/waypoint/cube`, to eval the waypoint policy, you can run the following.
