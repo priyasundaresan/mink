@@ -27,8 +27,18 @@ source set_env.sh
 ```
 
 ## Teleop for Mobile-SPHINX
+This is a good sanity check to test if the repo works locally for you, in the conda environment you created.
 Remember to run `source set_env.sh`  once per shell before running any script from this repo.
-If you just want to test out whole-body teleoperation using the iPhone as the teleoperation device, you can use:
+
+To test whole-body teleoperation using simple mouse click-drag interactions, you can use the following script:
+```shell
+source set_env.sh
+mjpython interactive_scripts/teleop_mouse.py
+```
+You will see a little red interaction cube appear at the end effector.
+You can `Double Click` to select it, then use `Ctrl + Right Click and Drag` (two fingers down on trackpad) to move it positionally, and `Ctrl + Left Click and Drag` to control orientation (one finger down on trackpad).
+
+To test out whole-body teleoperation using the iPhone as the teleoperation device, you can use:
 ```shell
 source set_env.sh
 mjpython interactive_scripts/teleop_phone.py
@@ -39,14 +49,6 @@ This will print out something like `Starting server at 10.30.163.179:5001`. Next
 * Your actions will only be mirrored when you are pressing the screen.
 * Swipe up/down to open/close the gripper. NOTE: the simulated gripper is currently a bit finicky.
 * You'll definitely want to practice before collecting any useful datasets! :)
-
-To test whole-body teleop using simple mouse click-drag interactions, you can use the following script:
-```shell
-source set_env.sh
-mjpython interactive_scripts/teleop_mouse.py
-```
-You will see a little red interaction cube appear at the end effector.
-You can `Double Click` to select it, then use `Ctrl + Right Click and Drag` to move it positionally, and `Ctrl + Left Click and Drag` to control orientation.
 
 ## Training/Evaluating Mobile-SPHINX
 
