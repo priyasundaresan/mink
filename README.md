@@ -94,7 +94,7 @@ Note:
 Remember to run `source set_env.sh`  once per shell before running any script from this repo.
 This part walks through how to collect data for a task from scratch. You can use this general workflow to collect data for & train other custom tasks.
 
-### Step 1: Collecting Teleoperated Data
+### Step 1: Collecting Teleoperated Data (Ex: Cube Task)
 Run the following:
 ```shell
 source set_env.sh
@@ -104,6 +104,7 @@ mjpython interactive_scripts/record_sim.py --env_cfg envs/cfgs/cube.yaml
 * Wait for the simulator window to load, then begin teleoperation.
 * Once done, you can click `End episode.`
 * After you see `Done saving` in Terminal, you can click `Reset` to begin the next episode.
+* If `is_success` is implemented, you should also see some feedback in Terminal when you have successfully teleoperated the task.
 * In general, wait for the simulator to load before teleoperating, and if the robot is not responsive to your iPhone actions, just try refreshing the page. 
 
 Each teleoperated episode will be saved as an `npz` to `dev1` as follows:
@@ -154,3 +155,16 @@ python dataset_utils/annotate_salient_points.py
 
 After this step, `dev1_relabeled` contains all the demos, now annotated with both modes and salient points!
 Rename this folder to whatever you want and put it in `data.` See above for how to train/eval the policy on the task for which you just collected data.
+
+### Adding Custom Tasks
+To add a custom task, you need to do the following:
+* Create XML's:
+  * In `interactive_scripts/stanford_tidybot`, create two files: `<task_name>.xml` and `tidybot_<task_name>.xml` (you can basically just copy over `cube.xml` and `tidybot_cube.xml`, replacing with your object assets in `<task_name>.xml`).
+* Create a new env config: `envs/cfgs/<task_name>.yaml` and give it a name in the `task` field
+* Register the task in `envs/mj_env.py`
+  * In the `__init__` method, update `xml_file` based on `task`
+  * Update `reset_task` 
+  * Update `is_success`
+* Finally, you can try `mjpython interactive_scripts/record_sim.py --env_cfg envs/cfgs/<task_name>.xml`
+  * NOTE: If you get the following error: `ValueError: Error: keyframe 0: invalid qpos size, expected length X`, it means the `home` keyframe of `tidybot_<task_name>.xml` is not the right dimension. This keyframe represents the home configuration of the whole robot, plus the `free joints` of whatever assets are in the scene (i.e., there are 7 free joints for the `cube` task, so the `home` keyframe is padded with `0.6 0 0 0 0 0 0` representing that the cube should be initially positioned at `[0.6, 0, 0]` and a "zero" quaternion (you can set this to something else if you want different initial object poses). 
+  * NOTE: You can make `reset_task` do nothing at first, and `is_success` trivially be `False` during debugging. I typically do this just so I can first focus on loading the scene properly, and once I am able to successfully teleoperate the task, I work backwards to figure out what initial scene randomizations are reasonable (for `reset_task`) and what the task success condition should be (for `is_success`, used to evaluate if rollouts are successful).
