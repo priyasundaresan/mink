@@ -98,7 +98,7 @@ This part walks through how to collect data for a task from scratch. You can use
 Run the following:
 ```shell
 source set_env.sh
-mjpython interactive_scripts/record_sim.py -env_cfg envs/cfgs/cube.yaml
+mjpython interactive_scripts/record_sim.py --env_cfg envs/cfgs/cube.yaml
 ```
 * Open XRBrowser, and go to the IP address printed out by the script, and hit `Start episode.`
 * Wait for the simulator window to load, then begin teleoperation.
@@ -115,6 +115,11 @@ dev1/
 
 ```
 NOTE: If you do mess up a demo after starting an episode and click `End episode`, you will need to manually delete the last recorded `npz` file. Every time you run the script `record_sim.py`, it will start saving from the last recorded demo index if there is one (i.e. if you just recorded `demo00004.npz` and quit, then re-run, it will save from `demo00005.npz`).
+
+To sanity check how your recorded demos look, we provide a script that loads demos from `dev1` and replays them.
+```shell
+python interactive_scripts/replay_sim.py --env_cfg envs/cfgs/cube.yaml
+```
 
 ### Step 2: Post-Processing: Labeling Modes
 Once happy with the demos recorded in `dev1`, we need to post-process them into a SPHINX-compatible format (e.g., with mode labels and salient point annotations).
