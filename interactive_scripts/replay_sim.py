@@ -14,4 +14,5 @@ if __name__ == "__main__":
     data_dir = 'dev1'
     for fn in os.listdir(data_dir):
         if 'npz' in fn:
-            env.replay_episode(os.path.join(data_dir, fn))
+            env.replay_episode(os.path.join(data_dir, fn), replay_mode="absolute")
+            #env.replay_episode(os.path.join(data_dir, fn), replay_mode="delta")

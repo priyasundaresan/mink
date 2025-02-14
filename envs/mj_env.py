@@ -358,6 +358,8 @@ class MujocoEnv:
         action = None
         gripper_state = 0
 
+        prev_record_obs = record_obs = self.observe()  # Only capture observations at 10Hz
+
         with mj.viewer.launch_passive(
             model=self.model,
             data=self.data,
@@ -395,10 +397,11 @@ class MujocoEnv:
                         ]
                     )
 
-                    delta_pos = record_action[:3] - record_obs["eef_pos"]
+                    delta_pos = record_action[:3] - prev_record_obs["eef_pos"]
                     delta_euler = quaternion_to_euler_diff(
-                        action["arm_quat"], record_obs["eef_quat"]
+                        prev_record_obs["eef_quat"], action["arm_quat"]
                     )
+                    prev_record_obs = record_obs
 
                     # Delta action to record
                     record_delta_action = np.concatenate(
@@ -439,7 +442,8 @@ class MujocoEnv:
         self.stopwatch.summary()
         print("Done saving")
 
-    def replay_episode(self, episode_fn):
+    def replay_episode(self, episode_fn, replay_mode="absolute"):
+        assert(mode in ["absolute", "delta"])
         demo = np.load(episode_fn, allow_pickle=True)["arr_0"]
 
         # Reset and seed based on episode idx
@@ -470,33 +474,34 @@ class MujocoEnv:
 
                     step = episode.pop(0)
 
-                    step["obs"]
-                    recorded_action = step["action"]
-
-                    # recorded_delta_action = step['delta_action']
+                    recorded_obs = step["obs"]
 
                     ## Absolute Replay
-                    action = {
-                        "base_pose": np.zeros(3),
-                        "arm_pos": recorded_action[:3] * [1, -1, 1],
-                        "arm_quat": R.from_euler("xyz", recorded_action[3:6]).as_quat(),
-                        "gripper_pos": np.array(recorded_action[-1]),
-                        "base_image": np.zeros((640, 360, 3)),
-                        "wrist_image": np.zeros((640, 480, 3)),
-                    }
+                    if replay_mode == 'absolute':
+                        recorded_action = step["action"]
+                        action = {
+                            "base_pose": np.zeros(3),
+                            "arm_pos": recorded_action[:3] * [1, -1, 1],
+                            "arm_quat": R.from_euler("xyz", recorded_action[3:6]).as_quat(),
+                            "gripper_pos": np.array(recorded_action[-1]),
+                            "base_image": np.zeros((640, 360, 3)),
+                            "wrist_image": np.zeros((640, 480, 3)),
+                        }
 
-                    #### Delta Replay
-                    # obs_eef_pos = recorded_obs['eef_pos']
-                    # obs_eef_euler = recorded_obs['eef_euler']
+                    ## Delta Replay
+                    else:
+                        recorded_delta_action = step['delta_action']
+                        obs_eef_pos = recorded_obs['eef_pos']
+                        obs_eef_euler = recorded_obs['eef_euler']
 
-                    # action = {
-                    #    'base_pose': np.zeros(3),
-                    #    'arm_pos': recorded_delta_action[:3] + obs_eef_pos,
-                    #    'arm_quat': R.from_euler('xyz', recorded_delta_action[3:6] + obs_eef_euler).as_quat(),
-                    #    'gripper_pos': np.array(recorded_delta_action[-1]),
-                    #    'base_image': np.zeros((640, 360, 3)),
-                    #    'wrist_image': np.zeros((640, 480, 3)),
-                    # }
+                        action = {
+                           'base_pose': np.zeros(3),
+                           'arm_pos': (recorded_delta_action[:3] + obs_eef_pos) * [1, -1, 1],
+                           'arm_quat': R.from_euler('xyz', recorded_delta_action[3:6] + obs_eef_euler).as_quat(),
+                           'gripper_pos': np.array(recorded_delta_action[-1]),
+                           'base_image': np.zeros((640, 360, 3)),
+                           'wrist_image': np.zeros((640, 480, 3)),
+                        }
 
                 gripper_state = gripper_state if not action else action["gripper_pos"]
                 self.step(action, gripper_state)
@@ -511,7 +516,7 @@ class MujocoEnv:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env_cfg", type=str, default="envs/cfgs/mj_env.yaml")
+    parser.add_argument("--env_cfg", type=str, default="envs/cfgs/open.yaml")
     args = parser.parse_args()
 
     env_cfg = pyrallis.load(MujocoEnvConfig, open(args.env_cfg, "r"))

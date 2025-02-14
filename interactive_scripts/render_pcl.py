@@ -6,7 +6,7 @@ import open3d as o3d
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env_cfg", type=str, default="envs/cfgs/mj_env_only_basecams.yaml")
+    parser.add_argument("--env_cfg", type=str, default="envs/cfgs/open.yaml")
     args = parser.parse_args()
     
     env_cfg = pyrallis.load(MujocoEnvConfig, open(args.env_cfg, "r"))
