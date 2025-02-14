@@ -160,7 +160,7 @@ Rename this folder to whatever you want and put it in `data.` See above for how 
 To add a custom task, you need to do the following:
 * Create XML's:
   * In `interactive_scripts/stanford_tidybot`, create two files: `<task_name>.xml` and `tidybot_<task_name>.xml` (you can basically just copy over `cube.xml` and `tidybot_cube.xml`, replacing with your object assets in `<task_name>.xml`).
-* Create a new env config: `envs/cfgs/<task_name>.yaml` and give it a name in the `task` field
+* Create a new `env_cfg`: `envs/cfgs/<task_name>.yaml` and give it a name in the `task` field
 * Register the task in `envs/mj_env.py`
   * In the `__init__` method, update `xml_file` based on `task`
   * Update `reset_task` 
@@ -168,3 +168,4 @@ To add a custom task, you need to do the following:
 * Finally, you can try `mjpython interactive_scripts/record_sim.py --env_cfg envs/cfgs/<task_name>.xml`
   * NOTE: If you get the following error: `ValueError: Error: keyframe 0: invalid qpos size, expected length X`, it means the `home` keyframe of `tidybot_<task_name>.xml` is not the right dimension. This keyframe represents the home configuration of the whole robot, plus the `free joints` of whatever assets are in the scene (i.e., there are 7 free joints for the `cube` task, so the `home` keyframe is padded with `0.6 0 0 0 0 0 0` representing that the cube should be initially positioned at `[0.6, 0, 0]` and a "zero" quaternion (you can set this to something else if you want different initial object poses). 
   * NOTE: You can make `reset_task` do nothing at first, and `is_success` trivially be `False` during debugging. I typically do this just so I can first focus on loading the scene properly, and once I am able to successfully teleoperate the task, I work backwards to figure out what initial scene randomizations are reasonable (for `reset_task`) and what the task success condition should be (for `is_success`, used to evaluate if rollouts are successful).
+* If all of this works as expected, you should be able to just pass the `env_cfg` you created whenever you are collecting demos with `record_sim` or evaluating policies with the eval scripts in `scripts/`.
