@@ -53,15 +53,24 @@ class MujocoEnv:
         self.cfg = cfg
         self.num_step = 0
         self.reward = 0
+        self.wpr_cfg = LinearWaypointReachConfig()
 
         ### Task to XML
         assert self.cfg.task in ["cube", "open"]
         if self.cfg.task == "cube":
             xml_file = "interactive_scripts/stanford_tidybot/cube.xml"
-            self.max_num_step = 900
+            self.max_num_step = 1500
+            self.wpr_cfg.pos_threshold = 0.01
+            self.wpr_cfg.pos_step_size = 0.08
+            self.wpr_cfg.rot_threshold = 0.05
+            self.wpr_cfg.rot_step_size = 0.3
         elif self.cfg.task == "open":
             xml_file = "interactive_scripts/stanford_tidybot/open.xml"
-            self.max_num_step = 1400
+            self.max_num_step = 1600
+            self.wpr_cfg.pos_threshold = 0.01
+            self.wpr_cfg.pos_step_size = 0.045
+            self.wpr_cfg.rot_threshold = 0.05
+            self.wpr_cfg.rot_step_size = 0.3
 
         self.model = mj.MjModel.from_xml_path(xml_file)
         self.model.vis.map.znear = 0.01
@@ -97,11 +106,6 @@ class MujocoEnv:
         self.ori_threshold = 1e-4
         self.max_iters = 20
 
-        self.wpr_cfg = LinearWaypointReachConfig()
-        self.wpr_cfg.pos_threshold = 0.01
-        self.wpr_cfg.pos_step_size = 0.08
-        self.wpr_cfg.rot_threshold = 0.05
-        self.wpr_cfg.rot_step_size = 0.3
 
         # Actuator IDs
         self.joint_names = [
@@ -168,7 +172,7 @@ class MujocoEnv:
         elif self.cfg.task == "open":
             door_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_SENSOR, "rightdoorhinge")
             right_door_angle = self.data.sensordata[door_id]
-            angle_thresh = 0.7
+            angle_thresh = 0.5
             self.reward = right_door_angle > angle_thresh
         return self.reward
 
