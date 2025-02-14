@@ -103,8 +103,8 @@ mjpython interactive_scripts/record_sim.py --env_cfg envs/cfgs/cube.yaml
 * Open XRBrowser, and go to the IP address printed out by the script, and hit `Start episode.`
 * Wait for the simulator window to load, then begin teleoperation.
 * Once done, you can click `End episode.`
+  * If `is_success` is implemented, you should also see some feedback in Terminal when you have successfully teleoperated the task (after which you should hit `End episode`).
 * After you see `Done saving` in Terminal, you can click `Reset` to begin the next episode.
-* If `is_success` is implemented, you should also see some feedback in Terminal when you have successfully teleoperated the task.
 * In general, wait for the simulator to load before teleoperating, and if the robot is not responsive to your iPhone actions, just try refreshing the page. 
 
 Each teleoperated episode will be saved as an `npz` to `dev1` as follows:
