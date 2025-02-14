@@ -54,7 +54,7 @@ This will print out something like `Starting server at 10.30.163.179:5001`. Next
 
 ### Download data
 
-Create a new `data` folder, download the data from [here](https://drive.google.com/drive/folders/1rzkMgkKm2slidJ2iLmBpVReOenwWI-uq?usp=sharing), and move it into `data` (NOTE, it is also available on `sc` cluster node: `/iliad/u/priyasun/mink/data`). See above instructions if you want to collect your own dataset.
+Create a new `data` folder, download the data from [here](https://drive.google.com/drive/folders/1rzkMgkKm2slidJ2iLmBpVReOenwWI-uq?usp=sharing), and move it into `data` (NOTE, it is also available on `sc` cluster node: `/iliad/u/priyasun/mink/data`). See instructions at the bottom if you want to collect your own dataset.
 
 ### Inspect the datasets
 You can run `python dataset_utils/waypoint_dataset.py` to load the cube dataset, and save some visualizations.
